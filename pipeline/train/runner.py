@@ -1,0 +1,101 @@
+"""Run gsplat ``simple_trainer.py`` through an injected command runner."""
+
+from __future__ import annotations
+
+import logging
+import time
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
+
+from train.commands import build_simple_trainer_command, latest_checkpoint, latest_ply
+from train.config import TrainConfig
+from train.errors import missing_dataset, trainer_failed
+from train.metrics import TrainMetrics, load_latest_val_stats, merge_metrics, parse_trainer_log
+
+LOGGER = logging.getLogger("pipeline.train")
+
+ProgressFn = Callable[[float, str], None]
+
+
+class CommandResult(Protocol):
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+class CommandRunner(Protocol):
+    def run(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: Path | None = None,
+        env: dict[str, str] | None = None,
+        timeout_s: float | None = None,
+    ) -> CommandResult: ...
+
+
+@dataclass(frozen=True)
+class TrainResult:
+    argv: tuple[str, ...]
+    metrics: TrainMetrics
+    result_dir: Path
+    ply_path: Path | None
+    ckpt_path: Path | None
+    log_text: str
+
+
+def run_training(
+    config: TrainConfig,
+    *,
+    data_dir: Path,
+    result_dir: Path,
+    runner: CommandRunner,
+    progress: ProgressFn | None = None,
+    ckpt: Path | None = None,
+) -> TrainResult:
+    if not data_dir.exists():
+        raise missing_dataset(str(data_dir))
+    result_dir.mkdir(parents=True, exist_ok=True)
+    argv = build_simple_trainer_command(
+        config,
+        data_dir=data_dir,
+        result_dir=result_dir,
+        ckpt=ckpt,
+    )
+    if progress is not None:
+        progress(0.02, "Iniciando treino 3DGS…")
+    LOGGER.info("event=gsplat_start argv=%s", " ".join(argv))
+    started = time.monotonic()
+    executed = runner.run(argv, timeout_s=config.timeout_s)
+    duration = time.monotonic() - started
+    log_text = f"{executed.stdout}\n{executed.stderr}"
+    if executed.returncode != 0:
+        raise trainer_failed(executed.stderr.strip() or executed.stdout.strip() or "nonzero")
+
+    metrics = merge_metrics(
+        parse_trainer_log(log_text),
+        load_latest_val_stats(result_dir),
+        duration_s=duration,
+    )
+    ply_path = latest_ply(result_dir)
+    ckpt_path = latest_checkpoint(result_dir)
+    if progress is not None:
+        psnr = f"{metrics.psnr_val:.2f}" if metrics.psnr_val is not None else "n/d"
+        progress(1.0, f"Treino concluído (PSNR val {psnr}).")
+    LOGGER.info(
+        "event=gsplat_done psnr=%s num_gs=%s duration_s=%.1f ply=%s",
+        metrics.psnr_val,
+        metrics.num_gaussians,
+        duration,
+        ply_path,
+    )
+    return TrainResult(
+        argv=tuple(argv),
+        metrics=metrics,
+        result_dir=result_dir,
+        ply_path=ply_path,
+        ckpt_path=ckpt_path,
+        log_text=log_text,
+    )

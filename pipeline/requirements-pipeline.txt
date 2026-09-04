@@ -1,0 +1,13 @@
+# Pipeline core (ingest / SfM / train / export / jobs).
+# Heavy runtime (CUDA, PyTorch, gsplat, COLMAP, ffmpeg, splat-transform) is
+# installed by the Provisioner — do not pin those here.
+#
+# Tests are written against the stdlib + mocks. numpy/Pillow are used when
+# present for real image I/O; they are not required to collect/run unit tests.
+
+# Optional I/O (frame scoring, thumbnails, dimension probe)
+numpy>=1.26
+pillow>=10.4
+
+# Test runner (also listed under pipeline/pyproject.toml [dev] by the provisioner)
+pytest>=8.3
