@@ -4,28 +4,31 @@ Plataforma **100% zero-CLI** que transforma **vídeos ou conjuntos de imagens** 
 
 > A fonte de verdade de alto nível — visão, arquitetura, plano faseado, stack e decisões — é o **[`tasks.md`](./tasks.md)**.
 
-## Status atual: Fase 0 (fundação + Provisioner + shell Tauri)
+## Status atual: consolidação (Fase 0 + wiring Fase 1–5 em código)
 
-Implementado e **verificado de verdade** nesta máquina:
+Implementado e **verificado por testes de código** nesta máquina (sem GPU/COLMAP/Open3D/MediaPipe/Rust):
 
-- Monorepo pnpm com `apps/web`, `apps/api`, `apps/desktop`, `packages/units`, `pipeline/`, `installer/`, `docs/`.
-- **Provisioner** (`pipeline/provisioner`): detecções reais de ambiente (GPU NVIDIA/driver/CUDA via `nvidia-smi`, WSL2 via `wsl --status`, disco, RAM, FFmpeg, COLMAP, Python) + verificações pós-instalação leves. As **instalações automatizadas são stubs documentados** (URLs oficiais em `pipeline/provisioner/install.py`) — a instalação real chega na próxima etapa do Provisioner.
-- **API local** (FastAPI): `GET /health`, `GET /setup/status`, `POST /setup/install` (assíncrono, 202), `GET /setup/progress` (polling), com CORS para o dev server do web e para o webview do Tauri.
-- **UI de Setup** (`apps/web`, React + Vite + TS + Zustand, copy em pt-BR): relatório de saúde por componente com **ações guiadas de correção**, botão de instalação com progresso por etapa + barra de %, **log expansível** e **download do registro para suporte**, com tratamento de loading/erro e "tentar novamente".
-- **Shell desktop** (`apps/desktop`): scaffold **Tauri v2** apontando para o dev server do web (ver seção Desktop abaixo — requer Rust para buildar).
-- **`packages/units`**: núcleo de conversão de unidades (`Length`/`Unit`, mm↔cm↔m↔in↔ft) com `big.js` + testes Vitest (round-trips e formatação pt-BR "1,83 m" e imperial 5' 6").
-- Qualidade: eslint + prettier, ruff, `.pre-commit-config.yaml` e workflow de CI (`.github/workflows/ci.yml`).
+- Monorepo pnpm com `apps/web`, `apps/api`, `apps/desktop`, `packages/{units,viewer,overlays}`, `pipeline/`, `installer/`, `docs/`.
+- **Provisioner** (`pipeline/provisioner`): detecções reais de ambiente (GPU NVIDIA/driver/CUDA via `nvidia-smi`, WSL2 via `wsl --status`, disco, RAM, FFmpeg, COLMAP, Python) + verificações pós-instalação leves. As **instalações automatizadas são stubs documentados** (URLs oficiais em `pipeline/provisioner/install.py`).
+- **Pipeline** (código + testes unitários): ingestão vídeo/imagens, comandos SfM/treino/export, job machine retomável (`extracting→sfm→training→exporting→meshproxy→autocal`), auto-calibração por altura com fallback se pose/depth faltar, meshproxy SKIPPED sem Open3D.
+- **API local** (FastAPI): Setup + jobs (upload, progresso WS, artefatos, `DELETE /jobs/{id}`), cenas, JWT Supabase (HS256) com isolamento por usuário. WS aceita `?token=` e `?access_token=`.
+- **UI web**: Setup em `/setup`; auth `/login|/signup|/reset`; jobs `/jobs|/upload|/jobs/:id`; viewer/edição/calibração/overlays atrás de `AuthGuard`. Home `/` → `/jobs`.
+- **`packages/units`**, **`@gs/viewer`**, **`@gs/overlays`**: unidades, schema de cena, renderer abstrato, overlays v1 (testes Vitest).
+- **Shell desktop** (`apps/desktop`): scaffold **Tauri v2** (Rust não verificado nesta máquina).
+- Qualidade: eslint + prettier, ruff, `.pre-commit-config.yaml` e workflow de CI.
 
 ## Estrutura de pastas
 
 ```
 ├── apps/
-│   ├── web/        # UI (Vite + React + TS + Zustand) — tela inicial = UI de Setup
-│   ├── api/        # API local FastAPI (routers/services/schemas)
+│   ├── web/        # UI (Vite + React + TS + Zustand + React Router)
+│   ├── api/        # API local FastAPI (setup, jobs, cenas, auth)
 │   └── desktop/    # Shell Tauri v2 (src-tauri/)
 ├── packages/
-│   └── units/      # Núcleo TS de unidades reais (big.js) + testes Vitest
-├── pipeline/       # Python: provisioner/ (detect, install, verify, health) + testes
+│   ├── units/      # Núcleo TS de unidades reais (big.js) + testes Vitest
+│   ├── viewer/     # Schema de cena, SplatRenderer, edição
+│   └── overlays/   # Overlays v1 (paint/wallpaper/sticker) + shaders
+├── pipeline/       # Python: provisioner, ingest, sfm, train, export, jobs, autocal, meshproxy
 ├── installer/      # Bootstrap do instalador (stub documentado da Fase 0)
 ├── docs/           # Documentação viva (aponta para tasks.md)
 ├── readme/         # Pasta original do workspace (preservada)
@@ -87,13 +90,15 @@ Na primeira vez: instale o Rust via [rustup](https://rustup.rs) (no Windows, o i
 ```powershell
 pnpm build          # build web + packages (tsc + vite)
 pnpm typecheck      # typecheck TS de todos os pacotes
-pnpm test           # Vitest (packages/units)
+pnpm test           # Vitest (units, viewer, overlays, web)
 pnpm lint           # eslint (flat config na raiz)
 pnpm format:check   # prettier
 
 # Python (venv):
-.\.venv\Scripts\python -m ruff check pipeline apps/api
-.\.venv\Scripts\python -m pytest pipeline apps/api
+.\.venv\Scripts\python -m ruff check .
+.\.venv\Scripts\python -m pytest pipeline
+.\.venv\Scripts\python -m pytest apps/api
+# Não rode `pytest pipeline apps/api` no mesmo processo — ambos expõem o pacote `tests`.
 ```
 
 Hooks de commit: `pip install pre-commit && pre-commit install`.

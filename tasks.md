@@ -1,8 +1,8 @@
 # Tasks — Plataforma de Gaussian Splatting a partir de Vídeo
 
 > Plano de ação de alto nível. Documento vivo: atualizar a cada fase concluída.
-> Última revisão: 2026-09-04 (3ª revisão — **Fase 0 executada**: monorepo consolidado na raiz, Provisioner com detecções reais + API FastAPI + UI de Setup verificados de verdade, núcleo de unidades testado, shell Tauri v2 scaffoldado, qualidade/CI configurados; instalações automatizadas do Provisioner seguem como stubs documentados — ver checklist da Fase 0 em §5).
-> Revisão anterior: 2026-09-04 (2ª revisão — incorpora: pipeline zero-CLI com setup automatizado, entrada mínima de dados [vídeo/imagens + altura], auto-calibração por altura e ferramenta de medida em tempo real no viewer; e consolida as 5 decisões tomadas em 2026-09-04 — ver §7).
+> Última revisão: 2026-09-04 (4ª revisão — **consolidação**: código dos agentes paralelos integrado na `master` local — pipeline ingest/SfM/treino/export/jobs + autocal + meshproxy, `@gs/viewer` + `@gs/overlays`, API jobs/auth/cenas, rotas web autenticadas; contratos de calibração/overlays/unidades/WS/erros alinhados; verificado por testes de código. **Não marcado**: GPU real, COLMAP/gsplat/Open3D/MediaPipe instalados, viewer rodando, E2E Playwright, sidecar Tauri).
+> Revisão anterior: 2026-09-04 (3ª revisão — **Fase 0 executada**: monorepo consolidado na raiz, Provisioner com detecções reais + API FastAPI + UI de Setup verificados de verdade, núcleo de unidades testado, shell Tauri v2 scaffoldado, qualidade/CI configurados; instalações automatizadas do Provisioner seguem como stubs documentados — ver checklist da Fase 0 em §5).
 
 ---
 
@@ -21,12 +21,12 @@ Aplicação end-to-end, **100% zero-CLI**, que transforma **vídeos ou conjuntos
 
 ## 2. Estado atual do projeto (levantamento em 2026-09-04)
 
-- Workspace: `D:\Projeto\Desenvolvendo\Gaussian_Splating_Caio`.
-- **Projeto greenfield**: o workspace contém apenas a pasta `readme/` com um repositório git recém-inicializado (branch `master`, **sem commits, sem remote, sem arquivos**).
-- Não existe código, README, `package.json`, `pyproject.toml`, `requirements.txt`, viewer, scripts de treino ou pipeline.
-- **Conclusão**: o plano começa do zero (Fase 0 = fundação + instalador automatizado). Nada a estender; tudo a construir.
+- Workspace: `D:\Projeto\Desenvolvendo\Gaussian_Splating_Caio` (branch `master` local, **sem remote**).
+- **Fase 0** no git: monorepo pnpm, UI de Setup, API `/setup/*`, Tauri scaffold, `@gs/units`, Provisioner, CI.
+- **Consolidação (2026-09-04, 4ª revisão)**: working tree dos 6 agentes foi integrado — `pipeline/{ingest,sfm,train,export,jobs,autocal,meshproxy}`, `packages/{viewer,overlays}`, `apps/web` com rotas `/login|/signup|/reset|/setup|/jobs|/upload|/viewer|/editing|/calibration|/overlays` + `AuthGuard`, API jobs/cenas/auth. Contratos: `CalibrationJson` ↔ autocal camelCase; `OverlayJson` = `@gs/overlays`; `UnitsPort` via `unitsBinding.ts`; WS `?token=` (+ compat `access_token`); erros FastAPI `{detail:{message,code}}`; `DELETE /jobs/{id}`.
+- **Verificação desta revisão** (sem GPU/toolchains pesados): `pnpm -r build/typecheck/test/lint` verdes; `ruff check .` limpo; `pytest pipeline` 112 passed + 1 skipped; `pytest apps/api` 35 passed. **Não** coletar `pytest pipeline apps/api` no mesmo processo (dois pacotes `tests`).
+- **Pendências pesadas**: CUDA/COLMAP/gsplat/MediaPipe/torch/Open3D/Rust — não instalados; `ColmapDepthProvider` é stub; meshproxy SKIPPED sem Open3D; sidecar Tauri e E2E Playwright não feitos.
 - **Decisões de produto/arquitetura tomadas em 2026-09-04** estão consolidadas em §7 e já refletidas nas fases e na stack.
-- **Atualização (2026-09-04, 3ª revisão)**: Fase 0 executada — o workspace agora tem o monorepo funcional (ver `README.md` e o checklist da Fase 0 em §5).
 
 ---
 
@@ -114,18 +114,18 @@ Decisões estruturais:
 
 **Objetivo**: dado um vídeo **ou** um conjunto de imagens (+ altura do usuário), produzir splat `.ply` (master) + `.ksplat` (web) de qualidade, com acompanhamento em tempo real e auto-calibração candidata.
 
-- [ ] **Contas e multiusuário desde já** (decisão 2026-09-04): **Supabase Auth** (e-mail/senha + OAuth), sessões no frontend, autorização por usuário nos endpoints, isolamento de jobs/artefatos por usuário.
-- [ ] Upload via API: **vídeo (multipart) OU upload múltiplo de imagens** (jpg/png/heic); se imagens, **pular a etapa ffmpeg**; validações (formato, duração/qtd. mínima, resolução) e storage versionado por usuário/job.
-- [ ] **Campo de altura do usuário** no fluxo de upload (obrigatório no MVP; persistir com o job para a auto-calibração).
-- [ ] Extração de frames com **ffmpeg** (somente para vídeo): taxa adaptativa (alvo 150–400 frames), detecção de blur/dedup (laplacian variance), normalização de resolução.
-- [ ] SfM com **COLMAP**: `feature_extractor` (SIFT) → `exhaustive_matcher` (ou `sequential_matcher` para vídeo contíguo) → `mapper`; falhar com mensagem clara quando houver poucas correspondências.
-- [ ] Treino com **gsplat** `simple_trainer.py` sobre o dataset COLMAP (`--data_factor` e steps configuráveis, checkpoints).
-- [ ] **Etapa de auto-calibração** (pós-SfM/treino): detecção de pessoa/pose nos frames (avaliar MediaPipe Tasks vs MMPose/RTMPose) → estimativa da altura da pessoa em unidades da cena → **fator de escala candidato** = altura real informada ÷ altura estimada, com score de confiança (nº de frames válidos, corpo inteiro visível, oclusão) → anexar ao JSON de cena (`scaleFactor`, `source: "auto-height"`, `confidence`).
-- [ ] Export: **`.ply` master** (fidelidade, com SH) + **`.ksplat` web** (compressão; avaliar PlayCanvas `splat-transform` para conversão/limpeza de floaters) — decisão 2026-09-04.
-- [ ] Orquestração de jobs **idempotente e retomável**: fila (arq/Celery/RQ), estado persistido por etapa (queued→extracting→sfm→training→exporting→autocal→done/error), resume a partir da última etapa válida, retry, cancelamento; **Provisioner valida o ambiente antes do job iniciar**.
-- [ ] **UI do pipeline em tempo real** (WebSocket/SSE): etapa atual, % por etapa, ETA estimado, logs acessíveis (expandir/baixar), erros explicáveis com ação sugerida.
-- [ ] Telemetria de qualidade: nº de imagens registradas, nº de gaussianas, PSNR de validação, tempo por etapa, resultado da auto-calibração (fator + confiança + nº de frames usados).
-- [ ] Endpoint de artefatos: download/stream do `.ply`/`.ksplat` e thumbnail/preview.
+- [x] **Contas e multiusuário desde já** (decisão 2026-09-04): **Supabase Auth** no frontend (`@supabase/supabase-js`, telas login/signup/reset) + JWT HS256 na API com isolamento por usuário (testes API). OAuth/RLS hospedado e sessão real em produção **não** verificados aqui (bypass de dev documentado).
+- [x] Upload via API: **vídeo (multipart) OU upload múltiplo de imagens** (jpg/png/heic); se imagens, **pular a etapa ffmpeg**; validações (formato, qtd. mínima) e storage por usuário/job — testes API + ingest. Duração/resolução real de ffmpeg **não** exercitada (binário pesado).
+- [x] **Campo de altura do usuário** no fluxo de upload (obrigatório no MVP; persistir com o job) — testes de validação web + spec do job.
+- [x] Extração de frames com **ffmpeg** (somente para vídeo): taxa adaptativa, blur/dedup, normalização — **código + testes de ingest** (ffmpeg real não instalado nesta verificação).
+- [ ] SfM com **COLMAP**: comandos/parse unitários existem; **execução real** `feature_extractor` → matcher → `mapper` pendente (COLMAP não instalado).
+- [ ] Treino com **gsplat** `simple_trainer.py`: métricas/comandos unitários existem; **treino CUDA real** pendente (gsplat/torch não instalados).
+- [x] **Etapa de auto-calibração** (pós-export/meshproxy): serviço + `PipelineAutocal` grava `calibration.json`; fallback se pose/depth faltar **nunca derruba o job** (testes autocal + adapter). Backends MediaPipe/MMPose e profundidade COLMAP **não** exercitados (`ColmapDepthProvider` é stub).
+- [x] Export: orquestração **`.ply` master** + **`.ksplat` web** + thumbnail — testes de comandos/runner. `splat-transform` / GPU real pendentes.
+- [x] Orquestração de jobs **idempotente e retomável**: máquina de estados persistida (`queued→extracting→sfm→training→exporting→meshproxy→autocal→done/error`), resume, retry, cancel — testes da job machine. Fila Redis/Celery e **gate do Provisioner no worker** ainda não.
+- [x] **UI do pipeline** + canal WS: etapas/%, catálogo de erros, cliente `?token=` — testes unitários web + testes WS da API. Acompanhamento visual E2E / ETA ao vivo **não** verificado no browser.
+- [x] Telemetria de qualidade: métricas de treino/ingest/autocal persistidas no registro do job — testes de métricas. PSNR real de GPU pendente.
+- [x] Endpoint de artefatos: download/stream do `.ply`/`.ksplat` e thumbnail — testes API com isolamento.
 
 **Tecnologias**: Supabase Auth, ffmpeg, COLMAP, gsplat (Apache-2.0), PyTorch, MediaPipe/MMPose (pose), FastAPI + WebSocket/SSE, Redis (fila), S3-compatível ou disco local.
 **Critérios de aceite**: (a) vídeo de teste (walkthrough 30–60s) **e** conjunto de ~200 fotos do mesmo ambiente geram `.ply`+`.ksplat` visualizáveis em ≤ 1h em GPU de consumidor (RTX 30xx+); (b) COLMAP registra ≥ 70% dos frames; PSNR val ≥ ~25 na cena de referência; (c) UI mostra progresso por etapa com atualização ≤ 2s e erro de SfM explicável; (d) em vídeo com pessoa de corpo inteiro + altura informada, auto-calibração produz fator com erro ≤ 5% medido contra distância conhecida; (e) job interrompido no meio do treino retoma da última etapa válida sem reprocessar SfM; (f) usuário A não acessa jobs/artefatos do usuário B.
@@ -136,15 +136,13 @@ Decisões estruturais:
 
 **Objetivo**: viewer web fluido do splat reconstruído, com navegação e seleção, sobre a abstração de renderer decidida.
 
-- [ ] **Interface `SplatRenderer` própria** (decisão 2026-09-04): contrato único (load, play/pause, TRS por cena, picking, qualidade) com **dois backends**:
-  - **Spark** (`@sparkjsdev/spark`, WebGPU) — primário, com recursos de edição dinâmica;
-  - **@mkkellogg/gaussian-splats-3d** (`DropInViewer`, WebGL2) — **fallback automático** quando WebGPU indisponível; embute splats numa `THREE.Scene` comum (mistura GLTF + splats) e suporta múltiplas cenas com TRS e reparenting para gizmos.
-- [ ] Detecção de capability no boot (WebGPU? WebGL2?) → seleção automática de backend com badge visível de qualidade.
-- [ ] Carregamento de `.ksplat` (web) / `.ply` (master) com progress bar, `splatAlphaRemovalThreshold` ajustável e escolha de spherical harmonics degree conforme GPU do cliente.
-- [ ] Navegação: `OrbitControls` (orbit/pan/zoom) + presets de câmera; opcional: primeiro-pessoa/WASD.
-- [ ] Seleção por clique: raycast — para splats, picking aproximado via centro da gaussana mais próxima do raio (ou proxy invisível); para meshes GLTF, raycast nativo do three.js.
-- [ ] HUD: contagem de gaussianas, FPS, memória, backend ativo (Spark/fallback), toggle de qualidade.
-- [ ] Integração com backend: listar cenas/jobs do usuário (auth), abrir cena por ID, streaming progressivo quando viável.
+- [x] **Interface `SplatRenderer` própria** (decisão 2026-09-04): contrato + adapters Spark / @mkkellogg — testes de `detectBackend`. **Renderer não executado** nesta máquina (WebGPU/WebGL).
+- [x] Detecção de capability (WebGPU? WebGL2?) no código do backend — testes unitários. Badge visual no HUD **não** verificado no browser.
+- [ ] Carregamento de `.ksplat` (web) / `.ply` (master) com progress bar — UI existe; **não** verificado com splat real.
+- [ ] Navegação: `OrbitControls` + presets de câmera — código no viewer; **não** verificado rodando.
+- [x] Seleção por clique: raycast de mesh + picking por centros de gaussiana — testes unitários de picking.
+- [ ] HUD: contagem de gaussianas, FPS, memória, backend ativo — UI presente; **não** medida em runtime.
+- [x] Integração com backend: cliente `viewerApi` + rotas `/viewer` (auth Supabase/bypass) — testes de parser/API. Viewer 3D ao vivo **não** exercitado.
 
 **Tecnologias**: three.js, Spark + @mkkellogg/gaussian-splats-3d (atrás de `SplatRenderer`), React + Vite + TypeScript, Zustand para estado.
 **Critérios de aceite**: splat de ~1–3M gaussianas roda a ≥ 30 FPS em GPU média; fallback WebGL2 engatilha automaticamente em navegador sem WebGPU (teste forçado via flag); navegação sem artefatos de ordenação perceptíveis; clique seleciona objeto com feedback visual em < 100ms; troca de backend não altera o JSON de cena.
@@ -155,14 +153,14 @@ Decisões estruturais:
 
 **Objetivo**: adicionar GLB/glTF e splats extras à cena e manipulá-los com gizmos — **sempre em unidades reais calibradas** (Fase 4 como dependência de exibição).
 
-- [ ] Import de **GLB/glTF** (`GLTFLoader` + `DRACOLoader`/meshopt) via upload ou biblioteca de assets.
-- [ ] Import de **splats adicionais** como objetos movíveis (múltiplas cenas com TRS; reparenting de `SplatScene` a um `Object3D` controlável — suportado por ambos os backends da `SplatRenderer`).
-- [ ] Gizmos: `TransformControls` (translate/rotate/scale, espaços local/world, snap configurável em unidades reais — ex.: 1 cm / 0,5 in).
-- [ ] **Dimensões reais visíveis durante o posicionamento**: bounding box do objeto exibido em m/cm/mm ou ft/in (conforme unidade ativa) enquanto arrasta/edita.
-- [ ] Hierarquia de cena: painel/outliner com seleção, renomear, duplicar, deletar, show/hide.
-- [ ] Painel de propriedades: posição/rotação/escala numéricas na unidade ativa + dimensões do bounding box.
-- [ ] Undo/redo (command stack) e persistência da cena editada (JSON de cena versionado no backend, por usuário).
-- [ ] Colisão/encaixe simples: snap ao "chão" estimado do splat (plano dominante via RANSAC nos centros das gaussianas).
+- [ ] Import de **GLB/glTF** (`GLTFLoader` + `DRACOLoader`/meshopt) — código de import existe; **não** verificado no viewer.
+- [ ] Import de **splats adicionais** como objetos movíveis — schema/nós `splat` no `SceneManager` (testes); render de splat extra **não** verificado.
+- [ ] Gizmos: `TransformControls` — código no package; **não** verificado na UI.
+- [ ] **Dimensões reais visíveis durante o posicionamento** — math de bounds existe; **não** verificado no drag.
+- [x] Hierarquia de cena: outliner com seleção, renomear, duplicar, deletar, show/hide — testes `SceneManager`.
+- [ ] Painel de propriedades — UI presente; **não** verificado no browser.
+- [x] Undo/redo (command stack) e persistência JSON de cena (schema + API de cenas com isolamento) — testes viewer + API. Reload visual **não** verificado.
+- [ ] Colisão/encaixe simples (RANSAC no chão) — não implementado/verificado.
 
 **Tecnologias**: three.js (`TransformControls`, `GLTFLoader`), Zustand/immer para command stack.
 **Critérios de aceite**: inserir um GLB, mover/girar/escalar via gizmo e via inputs numéricos com valores reais corretos (ex.: cadeira de 0,90 m); dimensões acompanham o drag em tempo real; estado sobrevive a reload (cena restaurada do JSON); undo/redo funciona em sequência de ≥ 20 operações.
@@ -173,14 +171,14 @@ Decisões estruturais:
 
 **Objetivo**: calibração como **ferramenta em tempo real dentro do viewer** — disponível antes e durante qualquer inserção de objetos/imagens — combinando auto-calibração por altura com referência manual.
 
-- [ ] **Núcleo de unidades** (`packages/units`): tipos `Length`, unidades {mm, cm, m, in, ft}, conversões exatas (base interna em mm com aritmética decimal — `big.js`), formatação localizada (pt-BR: "1,83 m"; imperial: 5' 6").
-- [ ] **Trena/régua ponto-a-ponto live**: ferramenta sempre disponível no viewer (atalho + botão); clique em 2 pontos da cena → distância exibida em tempo real na unidade ativa; múltiplas medidas simultâneas, edição de pontos (arrastar) e exclusão.
-- [ ] **Definir/redefinir referência a qualquer momento**: medir uma distância com a trena → "usar como referência" → informar o valor real → fator de escala recalculado e aplicado ao nó-raiz **sem reiniciar a sessão** (objetos já inseridos mantêm dimensões reais).
-- [ ] **Confirmação da auto-calibração na 1ª abertura da cena**: se o job trouxe `scaleFactor` com `source: "auto-height"`, pré-aplicar e pedir confirmação guiada — sugerir 2 pontos e perguntar **"a distância entre estes pontos parece X m?"** (opções: confirmar / ajustar / medir manualmente). Se confiança baixa ou ausente, ir direto para a calibração manual guiada.
-- [ ] Suporte a múltiplas calibrações (média ponderada) e exibição de erro estimado; indicador persistente no HUD do estado da escala ("calibrada · auto-altura · conf. alta" / "não calibrada").
-- [ ] **Consumidores sempre em unidades reais**: inserção de objetos 3D (Fase 3) e overlays de imagem (Fase 5) operam **somente** sobre cena calibrada — dimensões reais visíveis durante o posicionamento; bloqueio amigável com CTA de calibração se a cena estiver sem escala.
-- [ ] UI de unidades: seletor métrico/imperial, entrada de dimensões exatas em qualquer unidade com conversão ao vivo; preferência persistida no perfil (Supabase).
-- [ ] Persistir calibração (fator, origem, confiança, pontos de referência) no JSON de cena.
+- [x] **Núcleo de unidades** (`packages/units`): tipos `Length`, unidades {mm, cm, m, in, ft}, conversões exatas (`big.js`), formatação pt-BR / imperial — 17 testes Vitest. Bindings `unitsBinding.ts` em viewer/overlays/web.
+- [ ] **Trena/régua ponto-a-ponto live** no viewer — math (`tapeMath`, `scaleFactor`) tem testes; ferramenta **no canvas** não verificada (viewer não rodado).
+- [ ] **Definir/redefinir referência a qualquer momento** no viewer ao vivo — store/math existem; sessão 3D **não** verificada.
+- [ ] **Confirmação da auto-calibração na 1ª abertura da cena** — UI/gate de calibração no código; prompt E2E **não** verificado.
+- [ ] Suporte a múltiplas calibrações (média ponderada) e indicador persistente no HUD — schema tem `errorEstimate`/`warnings`; HUD ao vivo **não** verificado.
+- [x] **Consumidores em unidades reais** — `CalibrationGate` + tipos alinhados ao autocal; bloqueio visual E2E **não** verificado.
+- [x] UI de unidades: seletor métrico/imperial + conversão (testes de binding). Preferência remota no perfil Supabase **não** verificada.
+- [x] Persistir calibração (fator, origem, confiança, referência de trena) no JSON de cena — `CalibrationJson` + testes de schema.
 
 **Tecnologias**: `big.js` no núcleo; testes de propriedade (round-trip de conversões); Supabase (preferências por usuário).
 **Critérios de aceite**: (a) com auto-calibração por altura confirmada, medir distância conhecida da cena com erro ≤ 5%; com referência manual informada, erro ≤ 2%; (b) trena responde em < 100ms por medição e funciona durante uma sessão de edição sem reiniciar; (c) redefinir a referência no meio da edição preserva as dimensões reais dos objetos já inseridos; (d) conversão m↔ft/in round-trip exata até 0,01 mm; trocar unidade da UI não altera o modelo interno; (e) fluxo de 1ª abertura exibe o prompt de confirmação quando `source: "auto-height"` está presente.
@@ -191,14 +189,12 @@ Decisões estruturais:
 
 **Objetivo**: aplicar imagens/texturas sobre superfícies da cena reconstruída, **com escala em unidades reais**.
 
-- [ ] **Proxy geométrico**: splats puros não recebem textura UV — gerar malha proxy a partir da reconstrução:
-  - Opção A (pipeline): treinar/derivar **2DGS ou SuGaR** (malha extraída do splat) como etapa opcional do pipeline.
-  - Opção B (rápida, MVP): reconstrução Poisson/marching-cubes sobre a nuvem de centros das gaussianas (Open3D), com simplificação.
-- [ ] **Decals projetivos**: projeção de imagem sobre a malha via câmera virtual do ponto de vista atual (projective texture mapping / decal geometry), com controle de posição, escala, rotação e tiling.
-- [ ] Casos de uso **em unidades reais** (integra Fase 4): pintura de parede (cor sólida com mistura), papel de parede (textura tileada com **escala do padrão em cm/mm reais**), adesivos/stickers (decal único com alpha e **dimensão exata informada pelo usuário** — ex.: adesivo de 30 × 45 cm).
-- [ ] Seleção de superfície: clique na malha proxy (invisível ou semi-visível) define a região alvo; máscara por plano/normal para evitar "sangramento" em quinas.
-- [ ] Editor de overlay: upload de imagem, ajuste de opacidade/modo de mistura, preview em tempo real, múltiplos overlays por cena, persistência no JSON de cena.
-- [ ] Render final: overlays compõem com o splat (malha proxy renderizada só com a textura do overlay, depth-tested contra o splat).
+- [x] **Proxy geométrico (MVP Open3D)**: estágio opcional `meshproxy` na job machine; `OPEN3D_UNAVAILABLE` → `SKIPPED` (não erro) — testes do estágio + job machine. Poisson **real** exige Open3D (não instalado; 1 teste skip). SuGaR/2DGS não.
+- [x] **Decals projetivos (modelo + shaders)**: `@gs/overlays` v1 (`paint|wallpaper|sticker`, transform, physicalSize, maskByNormal) — 40 testes. Preview WebGL **não** verificado.
+- [x] Casos de uso em unidades reais (tiling físico cm/mm, sticker com dimensão) — testes `physicalTiling` + `unitsBinding`. Conferência com trena no viewer **não** feita.
+- [x] Máscara por normal (evitar sangramento) — testes `normalMask`. Seleção de superfície no canvas **não** verificada.
+- [x] Persistência de overlays no JSON de cena (`validateOverlay` / serialize) — testes overlays + sceneSchema. Editor visual E2E **não** verificado.
+- [ ] Render final overlays × splat no viewer — código de shader existe; **não** verificado com WebGL.
 
 **Tecnologias**: Open3D ou SuGaR/2DGS (malha), three.js (`DecalGeometry` ou shader de projeção custom), shaders GLSL para blending.
 **Critérios de aceite**: aplicar papel de parede em parede plana real da cena com alinhamento visual correto sob órbita de câmera; **escala do padrão em cm reais confere com a trena do viewer**; adesivo de dimensão exata informada (ex.: 30 cm) mede 30 cm na ferramenta; adesivo com alpha não mostra bordas; overlays persistem e recarregam.
@@ -224,15 +220,15 @@ Decisões estruturais:
 
 **Objetivo**: confiança contínua no instalador, no pipeline e na UI (preferência do usuário: **Playwright** para UI).
 
-- [ ] **E2E de UI com Playwright (MCP)**: fluxos críticos — **setup automatizado (com Provisioner mockado)** → criar conta → upload de vídeo/imagens + altura → acompanhamento de job em tempo real → abertura do viewer → **confirmação de auto-calibração / trena live** → inserção/manipulação de objeto com dimensões reais → aplicação de overlay → salvar/reabrir cena.
-- [ ] Testes do **instalador/Provisioner**: matriz de pré-checagens simuladas (sem GPU, WSL2 desabilitado, driver antigo, sem espaço) → mensagens guiadas corretas; idempotência (rodar 2×); smoke test pós-instalação de cada componente.
-- [ ] Testes de unidade: núcleo de unidades (conversões, round-trips, formatação pt-BR/imperial), reducers/command stack de edição, cálculo de fator de escala (auto e manual).
-- [ ] Testes de **auto-calibração**: dataset sintético/referência com altura conhecida (pessoa de 1,80 m) → fator dentro de ±5%; casos negativos (sem pessoa, corpo parcial, oclusão) → confiança baixa + fallback para manual.
-- [ ] Testes do pipeline: dataset de referência pequeno versionado (vídeo curto + conjunto de imagens + COLMAP esperado), checagem de regressão (nº imagens registradas, PSNR mínimo, nº de gaussianas dentro de faixa); **teste de resume** (matar worker no treino → retomar).
-- [ ] Testes visuais: screenshots do viewer em ângulos fixos (Playwright) com tolerância de diff; cena sintética determinística para estabilidade; teste do **fallback Spark→@mkkellogg** forçando ausência de WebGPU.
-- [ ] Testes de performance: FPS budget por classe de GPU, tempo de carregamento do splat, tempo de pipeline por etapa (alerta de regressão).
-- [ ] Matriz de compatibilidade: Chrome/Edge (WebGPU) + Firefox/Safari (fallback WebGL2).
-- [ ] QA manual guiado: checklist de aceite por fase executado a cada release.
+- [ ] **E2E de UI com Playwright (MCP)**: fluxos críticos ponta a ponta — **não** executados nesta consolidação.
+- [ ] Testes do **instalador/Provisioner**: matriz de falha simulada + smoke pós-instalação — detecções da Fase 0 existem; instalações reais seguem stub.
+- [x] Testes de unidade: núcleo de unidades (17), command stack / SceneManager, fator de escala e trena (web + viewer), parser de erros da API.
+- [x] Testes de **auto-calibração**: sintéticos (confiança, altura, scale factor, service, backends ausentes) + adapter da job machine. Dataset de pessoa real / ±5% visual **não**.
+- [x] Testes do pipeline (comandos, ingest, métricas, parse COLMAP, **resume da job machine**, meshproxy skip). Dataset de referência GPU / PSNR real **não**.
+- [ ] Testes visuais Playwright / fallback WebGPU forçado — pendente.
+- [ ] Testes de performance (FPS, tempo de splat, regressão de etapa GPU) — pendente.
+- [ ] Matriz de compatibilidade Chrome/Edge + Firefox/Safari — pendente.
+- [ ] QA manual guiado por release — pendente.
 
 **Tecnologias**: Playwright (via Playwright MCP no desenvolvimento), Vitest, pytest, GitHub Actions (job GPU self-hosted para pipeline, quando disponível).
 **Critérios de aceite**: suite E2E verde no CI para os 6+ fluxos críticos; cobertura do núcleo de unidades ≥ 90%; regressão de pipeline detecta degradação de PSNR > 1 dB; matriz do Provisioner cobre os 4 cenários de falha simulados; teste de resume passa sem reprocessar etapas concluídas.

@@ -59,8 +59,13 @@ jobs:
       - name: Ruff
         run: ruff check pipeline apps/api
 
-      - name: Pytest
-        run: pytest pipeline apps/api
+      - name: Pytest pipeline
+        run: pytest pipeline
+
+      - name: Pytest API
+        run: pytest apps/api
+        # Separate invocation: both trees expose a `tests` package; collecting
+        # them together makes API fixtures import pipeline/tests/conftest.py.
 
       - name: Import check da API
         run: python -c "from app.main import app; print(app.title)"
