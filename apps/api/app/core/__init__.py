@@ -1,1 +1,1 @@
-"""Núcleo da API: configuração e infraestrutura compartilhada."""
+"""Núcleo da API: configuração, autenticação e infraestrutura compartilhada."""

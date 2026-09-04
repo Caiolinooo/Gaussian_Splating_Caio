@@ -1,5 +1,5 @@
 """Routers da API."""
 
-from app.routers import health, setup
+from app.routers import health, jobs, scenes, setup
 
-__all__ = ["health", "setup"]
+__all__ = ["health", "jobs", "scenes", "setup"]
