@@ -1,0 +1,17 @@
+# pipeline/meshproxy — optional reconstruction extra for the Fase 5 proxy mesh.
+# Heavy / GPU-optional. Do not install from this workstream.
+# The package imports cleanly without these; reconstruction raises
+# BackendUnavailableError until they are present.
+#
+# Core tests are stdlib + pytest only.
+
+# pytest>=8.3
+# ruff>=0.11
+
+# ---------------------------------------------------------------------------
+# Extra: Open3D (Poisson / marching-cubes MVP) + NumPy
+# Large wheels; Open3D may use the GPU when a build provides it.
+# Future quality path (SuGaR / 2DGS) is a different extra.
+#   open3d>=0.18,<0.20
+#   numpy>=1.26
+# ---------------------------------------------------------------------------
