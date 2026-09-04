@@ -1,0 +1,26 @@
+# pipeline/autocal — runtime for the height auto-calibration service.
+# Heavy pose/GPU stacks are extras only. Do not install them from this workstream.
+
+# Core (service + pydantic scene JSON + tests)
+pydantic>=2.10,<3
+
+# Dev / tests (stdlib-pure besides pydantic)
+# pytest>=8.3
+# ruff>=0.11
+
+# ---------------------------------------------------------------------------
+# Extra: mediapipe  (MediaPipe Tasks Pose Landmarker)
+# Lightweight, CPU-friendly. Decide vs MMPose after the Fase 1 benchmark.
+#   mediapipe>=0.10.14
+#   # Download pose_landmarker.task and pass model_asset_path to MediaPipePoseBackend.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Extra: mmpose / rtmpose
+# Higher accuracy, heavier (mmcv + detector + torch). Torch comes from the
+# GPU provisioner — do not pin a CUDA wheel here.
+#   mmpose>=1.3.0
+#   mmdet>=3.3.0
+#   mmcv>=2.1.0
+#   # torch  — provided by pipeline/provisioner, not installed here
+# ---------------------------------------------------------------------------
