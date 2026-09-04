@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  javascript:
+    name: Web + Units (build, typecheck, testes, lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (web + packages)
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Testes (núcleo de unidades)
+        run: pnpm test
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Formato (prettier)
+        run: pnpm format:check
+
+  python:
+    name: Pipeline + API (ruff, pytest, import check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Instalar pacotes (pipeline + API, editáveis)
+        run: |
+          pip install -e ./pipeline
+          pip install -e "./apps/api[dev]"
+
+      - name: Ruff
+        run: ruff check pipeline apps/api
+
+      - name: Pytest
+        run: pytest pipeline apps/api
+
+      - name: Import check da API
+        run: python -c "from app.main import app; print(app.title)"
