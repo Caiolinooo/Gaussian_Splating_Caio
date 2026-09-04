@@ -1,0 +1,21 @@
+import { describe, expect, it } from 'vitest';
+
+import { explainJobError } from '../errorCatalog';
+
+describe('explainJobError', () => {
+  it('explica FEW_MATCHES com ação em pt-BR', () => {
+    const explained = explainJobError('FEW_MATCHES');
+    expect(explained.title).toMatch(/correspondências/i);
+    expect(explained.action).toMatch(/textura/i);
+  });
+
+  it('prioriza a mensagem da API quando houver', () => {
+    const explained = explainJobError('TOO_FEW_FRAMES', 'Só restaram 12 frames nítidos.');
+    expect(explained.message).toBe('Só restaram 12 frames nítidos.');
+  });
+
+  it('cai no genérico para código desconhecido', () => {
+    const explained = explainJobError('WEIRD', null);
+    expect(explained.action).toMatch(/registro/i);
+  });
+});

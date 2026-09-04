@@ -1,0 +1,98 @@
+.gs-panel {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid #2b3554;
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+}
+
+.gs-panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.gs-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.gs-outliner,
+.gs-trena-list,
+.gs-overlay-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.gs-outliner li,
+.gs-trena-list li,
+.gs-overlay-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 6px;
+  padding: 0.15rem 0.2rem;
+}
+
+.gs-outliner li.is-selected,
+.gs-trena-list li.is-selected,
+.gs-overlay-list li.is-selected {
+  background: var(--surface-alt);
+}
+
+.gs-outliner-name {
+  flex: 1;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0.2rem 0.3rem;
+}
+
+.gs-rename {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.gs-rename input,
+.gs-field input,
+.gs-field select,
+.gs-axis input,
+.gs-inline input {
+  background: #070b16;
+  color: var(--text);
+  border: 1px solid #2b3554;
+  border-radius: 6px;
+  padding: 0.35rem 0.45rem;
+  width: 100%;
+}
+
+.gs-field,
+.gs-axis {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  margin: 0.35rem 0;
+}
+
+.gs-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.gs-bbox {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.gs-warn {
+  color: var(--warning);
+  font-size: 0.85rem;
+}

@@ -1,0 +1,28 @@
+.gs-gate {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  width: min(420px, calc(100vw - 2rem));
+  background: var(--surface);
+  border: 1px solid #2b3554;
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 45%);
+}
+
+.gs-gate h2 {
+  margin-top: 0;
+}
+
+.gs-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.gs-trena-ref {
+  margin-top: 0.5rem;
+}
