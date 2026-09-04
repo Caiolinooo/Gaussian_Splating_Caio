@@ -1,0 +1,59 @@
+# ─── Sistema operacional ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Node / pnpm ────────────────────────────────────────────────────────
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+.turbo/
+coverage/
+
+# ─── Python ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ─── Rust / Tauri ───────────────────────────────────────────────────────
+target/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# ─── Artefatos do pipeline de Gaussian Splatting (nunca versionar) ──────
+*.ply
+*.ksplat
+*.splat
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+data/
+datasets/
+frames/
+outputs/
+artifacts/
+colmap_workspace/
+
+# ─── Logs e temporários ─────────────────────────────────────────────────
+*.log
+logs/
+tmp/
+temp/
+
+# ─── Ambiente / segredos ────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Editores ───────────────────────────────────────────────────────────
+.idea/
+.vscode/*
+!.vscode/extensions.json

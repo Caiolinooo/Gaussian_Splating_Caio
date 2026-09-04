@@ -1,0 +1,9 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm 11: permissões de build script por dependência (substitui
+# onlyBuiltDependencies/ignoredBuiltDependencies). esbuild precisa do
+# postinstall para validar o binário pré-compilado usado pelo Vite.
+allowBuilds:
+  esbuild: true
