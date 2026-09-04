@@ -1,0 +1,88 @@
+import type { Overlay as OverlayJson } from '@gs/overlays/types';
+
+import type { TRS } from '../math/trs';
+import type { SplatFormat, SplatQuality } from '../renderer/SplatRenderer';
+
+export type { Overlay as OverlayJson, OverlayKind } from '@gs/overlays/types';
+
+/** Versão atual do JSON de cena. Incremente ao quebrar compatibilidade. */
+export const SCENE_SCHEMA_VERSION = 1 as const;
+
+export type SceneSchemaVersion = typeof SCENE_SCHEMA_VERSION;
+
+export type SceneNodeKind = 'glb' | 'splat';
+
+/** Autocal emits auto-height|manual; `none` is the viewer initial state. */
+export type CalibrationSource = 'auto-height' | 'manual' | 'none';
+
+export interface BackgroundSplatJson {
+  id: string;
+  name: string;
+  uri: string;
+  format: SplatFormat;
+  visible: boolean;
+  trs?: TRS;
+  quality?: Partial<SplatQuality>;
+}
+
+export interface SceneNodeJson {
+  id: string;
+  name: string;
+  kind: SceneNodeKind;
+  uri: string;
+  format: 'glb' | 'gltf' | 'ply' | 'ksplat';
+  visible: boolean;
+  locked: boolean;
+  trs: TRS;
+  parentId: string | null;
+}
+
+/**
+ * Scene calibration fragment. Matches autocal `to_scene_dict()` camelCase
+ * plus optional live-tape `reference` and initial `source: "none"`.
+ */
+export interface CalibrationJson {
+  scaleFactor: number | null;
+  source: CalibrationSource;
+  confidence: number | null;
+  framesUsed?: number;
+  estimatedPersonHeightSceneUnits?: number | null;
+  errorEstimate?: number | null;
+  warnings?: string[];
+  reference?: {
+    sceneDistance: number;
+    realLengthMm: string;
+  };
+}
+
+export interface SceneDocument {
+  schemaVersion: SceneSchemaVersion;
+  id: string;
+  name: string;
+  backgroundSplat: BackgroundSplatJson | null;
+  nodes: SceneNodeJson[];
+  calibration: CalibrationJson;
+  overlays: OverlayJson[];
+}
+
+export const DEFAULT_CALIBRATION: CalibrationJson = Object.freeze({
+  scaleFactor: null,
+  source: 'none',
+  confidence: null,
+  framesUsed: 0,
+  estimatedPersonHeightSceneUnits: null,
+  errorEstimate: null,
+  warnings: [],
+});
+
+export function createEmptySceneDocument(name = 'Cena sem título'): SceneDocument {
+  return {
+    schemaVersion: SCENE_SCHEMA_VERSION,
+    id: '',
+    name,
+    backgroundSplat: null,
+    nodes: [],
+    calibration: { ...DEFAULT_CALIBRATION },
+    overlays: [],
+  };
+}

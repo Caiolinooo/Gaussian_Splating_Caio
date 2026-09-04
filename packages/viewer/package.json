@@ -1,0 +1,42 @@
+{
+  "name": "@gs/viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint . --config ../../eslint.config.mjs"
+  },
+  "dependencies": {
+    "@gs/overlays": "workspace:*",
+    "@gs/units": "workspace:*",
+    "@mkkellogg/gaussian-splats-3d": "^0.4.7",
+    "@sparkjsdev/spark": "^2.1.0",
+    "immer": "^10.1.3",
+    "three": "^0.180.0",
+    "zustand": "^5.0.8"
+  },
+  "peerDependencies": {
+    "three": ">=0.180.0"
+  },
+  "peerDependenciesMeta": {
+    "three": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "typescript": "~5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,119 @@
+export { assertNever } from './assertNever';
+export { createId } from './ids';
+export { CommandStack } from './editing/CommandStack';
+export {
+  applyOp,
+  invertOp,
+  labelForOp,
+  type EditorCommand,
+  type EditorOp,
+  type SceneState,
+} from './editing/commands';
+export { createViewerUiStore, type ViewerUiState, type ViewerUiStore } from './editing/editorStore';
+export {
+  applyTRSToHost,
+  MinimalObject3D,
+  readTRSFromHost,
+  type HostObject3D,
+} from './editing/hostObject';
+export { listOutlinerItems, type OutlinerItem, type OutlinerKind } from './editing/outliner';
+export {
+  SceneManager,
+  type AddNodeInput,
+  type SceneListener,
+  type SceneManagerOptions,
+} from './editing/SceneManager';
+export {
+  createEmptySceneDocument,
+  DEFAULT_CALIBRATION,
+  SCENE_SCHEMA_VERSION,
+  type BackgroundSplatJson,
+  type CalibrationJson,
+  type CalibrationSource,
+  type OverlayJson,
+  type OverlayKind,
+  type SceneDocument,
+  type SceneNodeJson,
+  type SceneNodeKind,
+  type SceneSchemaVersion,
+} from './editing/sceneSchema';
+export {
+  cloneSceneDocument,
+  parseSceneDocument,
+  SceneSchemaError,
+  serializeSceneDocument,
+} from './editing/serialize';
+export {
+  DEFAULT_SNAP,
+  TransformGizmo,
+  type SnapSettings,
+  type TransformGizmoOptions,
+  type TransformMode,
+  type TransformSpace,
+} from './editing/TransformGizmo';
+export { cloneTRS, createTRS, IDENTITY_TRS, trsEquals, type TRS } from './math/trs';
+export {
+  addVec3,
+  cloneQuat,
+  cloneVec3,
+  dotVec3,
+  normalizeVec3,
+  scaleVec3,
+  subVec3,
+  vec3,
+  vec3Length,
+  type Quat,
+  type Vec3,
+} from './math/vec3';
+export { createRayFromNdc, pickMeshes, type MeshPickHit } from './picking/meshRaycast';
+export { pickClosest, type UnifiedPickHit, type UnifiedPickKind } from './picking/resolveHit';
+export {
+  distancePointToRay,
+  pickClosestSplatCenter,
+  type PickCentersOptions,
+  type SplatCenterHit,
+  type SplatCenterSample,
+} from './picking/splatCenters';
+export {
+  createSplatRenderer,
+  type CreateSplatRendererOptions,
+  type CreateSplatRendererResult,
+  type SplatRendererHost,
+} from './renderer/createSplatRenderer';
+export {
+  detectBackend,
+  type BackendDetection,
+  type DetectBackendOptions,
+  type DetectedBackendKind,
+  type GpuAdapterLike,
+} from './renderer/detectBackend';
+export { MkKelloggBackend, type MkKelloggBackendHost } from './renderer/MkKelloggBackend';
+export { SparkBackend, type SparkBackendHost } from './renderer/SparkBackend';
+export {
+  assertSplatFormat,
+  DEFAULT_SPLAT_QUALITY,
+  mergeQuality,
+  toShDegree,
+  type BackendReasonCode,
+  type Ray3,
+  type RendererBackendKind,
+  type SceneParent,
+  type SplatCapabilities,
+  type SplatFormat,
+  type SplatHandle,
+  type SplatLoadOptions,
+  type SplatLoadProgress,
+  type SplatLoadSource,
+  type SplatPickHit,
+  type SplatPickOptions,
+  type SplatQuality,
+  type SplatRenderer,
+  type SphericalHarmonicsDegree,
+} from './renderer/SplatRenderer';
+export {
+  createFallbackUnitsPort,
+  LENGTH_UNITS,
+  type LengthUnit,
+  type UnitsPort,
+} from './units-port';
+export { createUnitsBinding } from './unitsBinding';
