@@ -50,7 +50,7 @@ const CATALOG: Record<KnownErrorCode, Omit<ExplainedError, 'code'>> = {
     title: 'Falha na etapa COLMAP',
     message: 'A reconstrução estrutural (SfM) interrompeu com erro técnico.',
     action:
-      'Abra Setup e confirme que o COLMAP está instalado. Se o binário existir, veja o registro do job e recapture o material se o erro persistir.',
+      'Baixe o registro COLMAP do job para ver a causa exata. Abra Setup e confirme que o COLMAP está instalado e executando; se o erro persistir, recapture o material com mais textura/luz.',
   },
   TOO_FEW_FRAMES: {
     title: 'Poucos frames nítidos',

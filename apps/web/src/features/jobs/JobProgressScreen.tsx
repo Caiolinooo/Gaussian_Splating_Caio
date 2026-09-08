@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { getApiBaseUrl, getAuthHeaders } from '../../lib/api';
 import type { EventsConnectionState } from '../../lib/events';
 import { explainJobError } from './errorCatalog';
 import { useJobsStore } from './jobsStore';
@@ -56,6 +57,7 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
     unsubscribe,
   } = useJobsStore();
   const [logOpen, setLogOpen] = useState(false);
+  const [techLogError, setTechLogError] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
 
   useEffect(() => {
@@ -117,6 +119,34 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
     anchor.download = `job-${jobId}-log.txt`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function downloadTechnicalLog() {
+    setTechLogError(null);
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/jobs/${encodeURIComponent(jobId)}/artifacts/log`,
+        { headers: { Accept: 'text/plain', ...(await getAuthHeaders()) } },
+      );
+      if (response.status === 404) {
+        setTechLogError('Registro técnico do COLMAP ainda não disponível para este job.');
+        return;
+      }
+      if (!response.ok) {
+        setTechLogError(`Erro ${response.status} ao baixar o registro técnico.`);
+        return;
+      }
+      const text = await response.text();
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `job-${jobId}-colmap.log`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setTechLogError('Não foi possível conectar à API para baixar o registro técnico.');
+    }
   }
 
   return (
@@ -221,7 +251,11 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
             <button type="button" onClick={downloadLog} disabled={logs.length === 0}>
               Baixar registro
             </button>
+            <button type="button" onClick={() => void downloadTechnicalLog()}>
+              Baixar registro COLMAP
+            </button>
             {logOpen && <pre className="jobs-log">{logs.join('\n') || 'Sem registros ainda.'}</pre>}
+            {techLogError && <p className="jobs-log-error">{techLogError}</p>}
           </div>
         </>
       )}

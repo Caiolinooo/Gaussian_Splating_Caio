@@ -232,6 +232,12 @@
   word-break: break-word;
 }
 
+.jobs-log-error {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  color: var(--error, #ef4444);
+}
+
 .jobs-error-card {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid var(--error, #ef4444);
