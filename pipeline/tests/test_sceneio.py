@@ -12,7 +12,14 @@ import pytest
 from export.config import ExportConfig
 from ingest.config import ImageIngestConfig, ToolBins, VideoIngestConfig
 from ingest.errors import IngestError
-from jobs.handlers import handle_export, handle_extract, handle_sfm, handle_training
+from jobs.handlers import (
+    handle_autocal,
+    handle_export,
+    handle_extract,
+    handle_meshproxy,
+    handle_sfm,
+    handle_training,
+)
 from jobs.models import JobSpec, new_job_record
 from jobs.paths import job_paths
 from jobs.states import SourceKind, StageStatus
@@ -129,6 +136,10 @@ def test_handle_ply_skips_sfm_and_training(tmp_path: Path) -> None:
     assert sfm.skipped is True
     train = handle_training(record, lambda *_: None, _MustNotRun())
     assert train.skipped is True
+    mesh = handle_meshproxy(record, lambda *_: None)
+    assert mesh.skipped is True
+    auto = handle_autocal(record, lambda *_: None, SimpleNamespace(run=lambda *_a, **_k: None))
+    assert auto.skipped is True
     record.stages["extracting"].artifacts = extracted.artifacts
     exported = handle_export(record, lambda *_: None, _MissingTransform())
     assert Path(exported.artifacts["scene_json"]).is_file()

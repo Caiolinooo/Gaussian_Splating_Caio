@@ -24,6 +24,7 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - **Retry de job não herda mais estado parcial**: `database.db` (+ `-wal`/`-shm`) e `sparse/` de tentativas anteriores são removidos antes de cada tentativa do SfM — o `mapper` não escreve mais em `sparse/1` enquanto o `model_converter` lê um `sparse/0` velho.
 - **Setup detecta COLMAP quebrado**: `detect_colmap` marca ERRO quando `colmap -h` sai com código não-zero (ex.: `libGL`/CUDA runtime ausentes), em vez de reportar OK.
 - **Compatibilidade com COLMAP 4.x**: o toggle de GPU mudou de nome (`SiftExtraction.use_gpu` → `FeatureExtraction.use_gpu`, `SiftMatching.use_gpu` → `FeatureMatching.use_gpu`) e builds 4.x abortavam com "unrecognised option". O pipeline agora sonda `colmap <cmd> -h` uma vez por job e usa os nomes que o binário instalado aceita (ou omite a flag se nenhum existir).
+- **Import de PLY não cai mais no meshproxy**: SfM, treino, malha proxy e autocal são pulados — um splat pronto não precisa reconstruir proxy a partir da nuvem.
 - **Export não derruba mais o job sem splat-transform**: removido o fallback para `npx` (que fazia o npm tentar executar o `.ply` como pacote e falhava com `TRANSFORM_FAILED`); sem o binário do usuário, o `.ksplat` é omitido e o `.ply` mestre segue — comportamento documentado. Erros de "pacote npm ausente" também passam a ser tratados como skip.
 
 ## [0.2.0] - 2026-09-08

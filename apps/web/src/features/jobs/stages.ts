@@ -169,7 +169,7 @@ export function buildTimeline(
     if (
       !record &&
       sourceKind === 'ply' &&
-      (key === 'sfm' || key === 'training' || key === 'autocal')
+      (key === 'sfm' || key === 'training' || key === 'meshproxy' || key === 'autocal')
     ) {
       status = 'skipped';
     }
@@ -178,7 +178,7 @@ export function buildTimeline(
         status = 'skipped';
       } else if (
         sourceKind === 'ply' &&
-        (key === 'sfm' || key === 'training' || key === 'autocal')
+        (key === 'sfm' || key === 'training' || key === 'meshproxy' || key === 'autocal')
       ) {
         status = 'skipped';
       } else {
@@ -197,6 +197,9 @@ export function buildTimeline(
     }
     if (status === 'skipped' && sourceKind === 'ply' && key === 'training') {
       detail = detail ?? 'PLY já é splat — treino 3DGS não é necessário.';
+    }
+    if (status === 'skipped' && sourceKind === 'ply' && key === 'meshproxy') {
+      detail = detail ?? 'PLY importado — malha proxy não se aplica.';
     }
     if (status === 'skipped' && sourceKind === 'ply' && key === 'autocal') {
       detail = detail ?? 'PLY importado — auto-calibração por frames não se aplica.';

@@ -21,7 +21,8 @@ Inspiração (só o que cabe no produto; **não** clonamos SuperSplat nem Gaussi
                     │        ├─ video → ffmpeg → frames   │
                     │        └─ images → valida + copia   │
                     │   JobMachine (etapas únicas)        │
-                    │        ply: SfM + treino SKIPPED    │
+                    │        ply: SfM/treino/mesh/autocal │
+                    │             SKIPPED                 │
                     │   export_scene()                    │
                     │        .ply + .ksplat + scene.json  │
                     │        + scene.zip                  │
@@ -32,7 +33,7 @@ Inspiração (só o que cabe no produto; **não** clonamos SuperSplat nem Gaussi
 
 - **Detectar** por sufixo/conjunto (`pipeline/sceneio/detect.py`). O upload HTTP só persiste arquivos; o kind vem do detector.
 - **Ingerir** sempre grava `ingest.json` no work dir (kind, paths, temporal).
-- **PLY direto**: não roda COLMAP nem gsplat. Exporta o splat recebido.
+- **PLY direto**: não roda COLMAP, gsplat, meshproxy nem autocal. Exporta o splat recebido.
 - **GIF**: mesmo caminho de vídeo (ffmpeg → frames). GIF curto relaxa o mínimo de frames. Metadados temporais alimentam o scrubber; **não** há treino 4DGS.
 - **Export**: `master.ply` (mestre) + `scene.ksplat` (web, se houver splat-transform) + `scene.json` (schema `@gs/viewer`, camelCase) + `scene.zip` (pacote para outros programas).
 - **Viewer**: interface `SplatRenderer` única. Spark = caminho WebGPU; MkKellogg = WebGL2. Sem segundo viewer.

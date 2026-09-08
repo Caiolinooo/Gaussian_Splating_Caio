@@ -52,6 +52,7 @@ describe('buildTimeline', () => {
     const items = buildTimeline({}, 'queued', 'ply');
     expect(items.find((item) => item.key === 'sfm')?.status).toBe('skipped');
     expect(items.find((item) => item.key === 'training')?.status).toBe('skipped');
+    expect(items.find((item) => item.key === 'meshproxy')?.status).toBe('skipped');
     expect(items.find((item) => item.key === 'autocal')?.status).toBe('skipped');
   });
 

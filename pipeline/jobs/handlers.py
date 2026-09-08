@@ -272,6 +272,14 @@ def handle_export(record: JobRecord, progress: Callable[[float, str], None], run
 
 
 def handle_meshproxy(record: JobRecord, progress: Callable[[float, str], None]) -> StageOutcome:
+    if skips_reconstruction(record.source.kind):
+        progress(1.0, "PLY importado — malha proxy não se aplica.")
+        return StageOutcome(
+            artifacts={},
+            metrics={"skipped": True, "reason": "ply_import"},
+            message="PLY importado — malha proxy não se aplica.",
+            skipped=True,
+        )
     progress(0.05, "Gerando malha proxy…")
     if meshproxy_stage is None or BackendUnavailableError is None or MeshProxyError is None:
         return StageOutcome(
