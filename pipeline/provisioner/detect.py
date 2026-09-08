@@ -395,7 +395,8 @@ def detect_python() -> ComponentCheck:
 def detect_pytorch() -> ComponentCheck:
     """PyTorch no interpretador atual (treino 3DGS)."""
     key, name = "pytorch", "PyTorch"
-    result = _run([sys.executable, "-c", "import torch; print(torch.__version__, int(torch.cuda.is_available()), torch.version.cuda or '')"])
+    probe = "import torch; print(torch.__version__, int(torch.cuda.is_available()), torch.version.cuda or '')"
+    result = _run([sys.executable, "-c", probe])
     if result is None or result.returncode != 0:
         return ComponentCheck(
             key,

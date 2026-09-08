@@ -202,13 +202,13 @@ def colmap_from_settings(settings: Settings) -> Any:
 def build_pipeline_runtime(settings: Settings) -> JobRuntime:
     """Construct the real JobMachine. Deferred import so ``app.main`` stays light."""
     from app.pipeline_jobs import (  # deferred: pipeline must not load at API import
+        ColmapConfig,
         JobMachine,
         JobNotFound,
         JobSpec,
         SourceKind,
         SqliteJobStore,
         ToolPaths,
-        ColmapConfig,
         TrainConfig,
         default_handlers,
         record_from_dict,
