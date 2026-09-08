@@ -10,6 +10,7 @@ from ingest.adaptive import format_fps
 from ingest.probe import build_ffprobe_command
 from ingest.video import build_ffmpeg_extract_command
 from sfm.commands import (
+    ColmapCliDialect,
     build_exhaustive_matcher_command,
     build_feature_extractor_command,
     build_mapper_command,
@@ -162,6 +163,30 @@ def test_splat_transform_ksplat_command() -> None:
     assert argv[argv.index("--filter-floaters") + 1] == "0.05,0.1,0.004"
     assert argv[argv.index("--filter-harmonics") + 1] == "2"
     assert argv[-1].endswith("scene.ksplat")
+
+
+def test_colmap_v4_dialect_gpu_flags() -> None:
+    cfg = ColmapConfig(use_gpu=True)
+    paths = ColmapPaths(image_dir=Path("/job/images"), work_dir=Path("/job/colmap"))
+    dialect = ColmapCliDialect(
+        extraction_gpu_flag="FeatureExtraction.use_gpu",
+        matching_gpu_flag="FeatureMatching.use_gpu",
+    )
+    commands = build_sfm_pipeline_commands(cfg, paths, source_kind="video", dialect=dialect)
+    extractor = commands[0]
+    assert "--FeatureExtraction.use_gpu" in extractor
+    assert "--SiftExtraction.use_gpu" not in extractor
+    matcher = commands[1]
+    assert "--FeatureMatching.use_gpu" in matcher
+    assert "--SiftMatching.use_gpu" not in matcher
+
+
+def test_colmap_dialect_none_omits_gpu_flags() -> None:
+    cfg = ColmapConfig(use_gpu=False)
+    paths = ColmapPaths(image_dir=Path("/job/images"), work_dir=Path("/job/colmap"))
+    dialect = ColmapCliDialect(extraction_gpu_flag=None, matching_gpu_flag=None)
+    commands = build_sfm_pipeline_commands(cfg, paths, source_kind="video", dialect=dialect)
+    assert all("use_gpu" not in " ".join(argv) for argv in commands[:2])
 
 
 def test_thumbnail_command() -> None:

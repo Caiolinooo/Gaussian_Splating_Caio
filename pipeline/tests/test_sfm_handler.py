@@ -30,6 +30,8 @@ class _HeadlessColmap:
 
     def run(self, argv: Any, **_kwargs: Any) -> _FakeResult:
         argv = list(argv)
+        if "-h" in argv:
+            return _FakeResult(0, stdout="--SiftExtraction.use_gpu arg\n--SiftMatching.use_gpu arg\n")
         for flag in ("--SiftExtraction.use_gpu", "--SiftMatching.use_gpu"):
             if flag in argv and argv[argv.index(flag) + 1] == "1":
                 return _FakeResult(1, stderr="Cannot create OpenGL context")

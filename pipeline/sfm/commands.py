@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from sfm.config import CameraModel, ColmapConfig, ColmapPaths
 from sfm.parse import count_input_images
+
+
+# COLMAP 4.x moveu o toggle de GPU para os grupos FeatureExtraction/FeatureMatching;
+# builds 3.x usam SiftExtraction.use_gpu / SiftMatching.use_gpu.
+@dataclass(frozen=True)
+class ColmapCliDialect:
+    """Nomes de flag de GPU que o binário instalado aceita (None = omitir)."""
+
+    extraction_gpu_flag: str | None = "SiftExtraction.use_gpu"
+    matching_gpu_flag: str | None = "SiftMatching.use_gpu"
 
 
 def _flag(value: bool) -> str:
@@ -18,9 +29,10 @@ def build_feature_extractor_command(
     paths: ColmapPaths,
     *,
     camera_model: CameraModel | None = None,
+    gpu_flag: str | None = "SiftExtraction.use_gpu",
 ) -> list[str]:
     model = camera_model or config.camera_model
-    return [
+    argv = [
         config.colmap_bin,
         "feature_extractor",
         "--database_path",
@@ -31,46 +43,63 @@ def build_feature_extractor_command(
         _flag(config.single_camera),
         "--ImageReader.camera_model",
         model,
-        "--SiftExtraction.use_gpu",
-        _flag(config.use_gpu),
     ]
+    if gpu_flag is not None:
+        argv += [f"--{gpu_flag}", _flag(config.use_gpu)]
+    return argv
 
 
-def build_exhaustive_matcher_command(config: ColmapConfig, paths: ColmapPaths) -> list[str]:
-    return [
+def build_exhaustive_matcher_command(
+    config: ColmapConfig,
+    paths: ColmapPaths,
+    *,
+    gpu_flag: str | None = "SiftMatching.use_gpu",
+) -> list[str]:
+    argv = [
         config.colmap_bin,
         "exhaustive_matcher",
         "--database_path",
         str(paths.database),
-        "--SiftMatching.use_gpu",
-        _flag(config.use_gpu),
     ]
+    if gpu_flag is not None:
+        argv += [f"--{gpu_flag}", _flag(config.use_gpu)]
+    return argv
 
 
-def build_sequential_matcher_command(config: ColmapConfig, paths: ColmapPaths) -> list[str]:
-    return [
+def build_sequential_matcher_command(
+    config: ColmapConfig,
+    paths: ColmapPaths,
+    *,
+    gpu_flag: str | None = "SiftMatching.use_gpu",
+) -> list[str]:
+    argv = [
         config.colmap_bin,
         "sequential_matcher",
         "--database_path",
         str(paths.database),
-        "--SiftMatching.use_gpu",
-        _flag(config.use_gpu),
+    ]
+    if gpu_flag is not None:
+        argv += [f"--{gpu_flag}", _flag(config.use_gpu)]
+    argv += [
         "--SequentialMatching.overlap",
         str(config.sequential_overlap),
         "--SequentialMatching.quadratic_overlap",
         _flag(config.sequential_quadratic_overlap),
     ]
+    return argv
 
 
 def build_matcher_command(
     config: ColmapConfig,
     paths: ColmapPaths,
     matcher: Literal["exhaustive", "sequential"],
+    *,
+    gpu_flag: str | None = "SiftMatching.use_gpu",
 ) -> list[str]:
     if matcher == "exhaustive":
-        return build_exhaustive_matcher_command(config, paths)
+        return build_exhaustive_matcher_command(config, paths, gpu_flag=gpu_flag)
     if matcher == "sequential":
-        return build_sequential_matcher_command(config, paths)
+        return build_sequential_matcher_command(config, paths, gpu_flag=gpu_flag)
     raise AssertionError(f"unhandled matcher: {matcher!r}")
 
 
@@ -105,12 +134,14 @@ def build_sfm_pipeline_commands(
     paths: ColmapPaths,
     *,
     source_kind: Literal["video", "images"],
+    dialect: ColmapCliDialect | None = None,
 ) -> list[list[str]]:
+    dialect = dialect or ColmapCliDialect()
     image_count = count_input_images(paths.image_dir)
     matcher = config.resolve_matcher(source_kind, image_count=image_count)
     return [
-        build_feature_extractor_command(config, paths),
-        build_matcher_command(config, paths, matcher),
+        build_feature_extractor_command(config, paths, gpu_flag=dialect.extraction_gpu_flag),
+        build_matcher_command(config, paths, matcher, gpu_flag=dialect.matching_gpu_flag),
         build_mapper_command(config, paths),
         build_model_converter_txt_command(config, paths.model_dir),
     ]

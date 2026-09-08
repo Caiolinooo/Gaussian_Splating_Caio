@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Protocol
 
-from sfm.commands import build_sfm_pipeline_commands
+from sfm.commands import ColmapCliDialect, build_sfm_pipeline_commands
 from sfm.config import ColmapConfig, ColmapPaths, SourceKind
 from sfm.errors import colmap_failed, colmap_missing, no_reconstruction
 from sfm.parse import ReconstructionSummary, count_input_images, summarize_reconstruction
@@ -87,16 +87,63 @@ def _clean_work_dir(paths: ColmapPaths) -> None:
     paths.sparse_dir.mkdir(parents=True, exist_ok=True)
 
 
+def _help_text(config: ColmapConfig, runner: CommandRunner, command: str) -> str:
+    """``colmap <command> -h`` — texto de ajuda ou "" quando indisponível."""
+    try:
+        result = runner.run([config.colmap_bin, command, "-h"], timeout_s=15.0)
+    except FileNotFoundError as exc:
+        raise colmap_missing(config.colmap_bin) from exc
+    except OSError as exc:
+        if getattr(exc, "errno", None) in {2, 3} or getattr(exc, "winerror", None) == 2:
+            raise colmap_missing(config.colmap_bin) from exc
+        return ""
+    if result.returncode != 0:
+        return ""
+    return f"{result.stdout}\n{result.stderr}"
+
+
+def _pick_flag(help_text: str, candidates: tuple[str, ...]) -> str | None:
+    for candidate in candidates:
+        if candidate in help_text:
+            return candidate
+    return None
+
+
+def probe_cli_dialect(
+    config: ColmapConfig,
+    runner: CommandRunner,
+    matcher: Literal["exhaustive", "sequential"],
+) -> ColmapCliDialect:
+    """Detecta os nomes de flag de GPU do binário instalado (3.x legado vs 4.x)."""
+    extraction_help = _help_text(config, runner, "feature_extractor")
+    matching_help = _help_text(config, runner, f"{matcher}_matcher")
+    dialect = ColmapCliDialect(
+        extraction_gpu_flag=_pick_flag(
+            extraction_help, ("FeatureExtraction.use_gpu", "SiftExtraction.use_gpu")
+        ),
+        matching_gpu_flag=_pick_flag(
+            matching_help, ("FeatureMatching.use_gpu", "SiftMatching.use_gpu")
+        ),
+    )
+    LOGGER.info(
+        "event=colmap_dialect extraction_flag=%s matching_flag=%s",
+        dialect.extraction_gpu_flag,
+        dialect.matching_gpu_flag,
+    )
+    return dialect
+
+
 def _run_graph(
     config: ColmapConfig,
     paths: ColmapPaths,
     runner: CommandRunner,
     *,
     source_kind: SourceKind,
+    dialect: ColmapCliDialect,
     progress: ProgressFn | None,
 ) -> tuple[Literal["exhaustive", "sequential"], list[list[str]], str]:
     matcher = config.resolve_matcher(source_kind)
-    commands = build_sfm_pipeline_commands(config, paths, source_kind=source_kind)
+    commands = build_sfm_pipeline_commands(config, paths, source_kind=source_kind, dialect=dialect)
     chunks: list[str] = []
     total = len(commands)
 
@@ -136,6 +183,9 @@ def run_sfm(
 ) -> SfmResult:
     paths.work_dir.mkdir(parents=True, exist_ok=True)
 
+    matcher = config.resolve_matcher(source_kind, image_count=count_input_images(paths.image_dir))
+    dialect = probe_cli_dialect(config, runner, matcher)
+
     attempts = [config]
     if config.use_gpu:
         attempts.append(replace(config, use_gpu=False))
@@ -161,6 +211,7 @@ def run_sfm(
                 paths,
                 runner,
                 source_kind=source_kind,
+                dialect=dialect,
                 progress=progress,
             )
         except _StepFailed as exc:
