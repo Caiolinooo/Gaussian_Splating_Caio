@@ -67,14 +67,18 @@ def resolve_colmap_bin(configured: str = "colmap") -> str | None:
 
 
 def resolve_splat_transform(configured: str = "splat-transform") -> str:
+    """Localiza o conversor `.ksplat` do usuário; nunca cai para `npx`.
+
+    O fallback para `npx` foi removido: com o binário em ``argv[0]`` o npx
+    tentava executar o `.ply` como pacote, e o `@playcanvas/splat-transform`
+    do npm não emite `.ksplat` (formato do mkkellogg). Ausência do binário
+    vira skip gracioso no export (`.ply` mestre é preservado).
+    """
     if configured and Path(configured).is_file():
         return str(Path(configured))
     found = shutil.which(configured or "splat-transform")
     if found:
         return found
-    npx = shutil.which("npx")
-    if npx:
-        return npx
     return configured or "splat-transform"
 
 

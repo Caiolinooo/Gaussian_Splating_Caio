@@ -21,7 +21,19 @@ ProgressFn = Callable[[float, str], None]
 
 def _looks_like_missing_binary(detail: str, binary: str) -> bool:
     text = f"{detail} {binary}".lower()
-    return any(token in text for token in ("not found", "não encontrado", "cannot find", "no such file"))
+    # Tokens de "binário ausente" — inclusive quando a resolução cai no `npx`
+    # e o npm não acha o pacote executável (E404 / could not determine executable).
+    return any(
+        token in text
+        for token in (
+            "not found",
+            "não encontrado",
+            "cannot find",
+            "no such file",
+            "could not determine executable",
+            "npm error code e404",
+        )
+    )
 
 
 class CommandResult(Protocol):
