@@ -11,7 +11,8 @@ import sys
 from pathlib import Path
 
 _TESTS_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _TESTS_DIR.parents[3]
+# parents: [0]=meshproxy, [1]=pipeline, [2]=raiz do monorepo.
+_REPO_ROOT = _TESTS_DIR.parents[2]
 for _path in (_REPO_ROOT, _TESTS_DIR):
     rendered = str(_path)
     if rendered not in sys.path:
