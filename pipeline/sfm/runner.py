@@ -12,7 +12,7 @@ from typing import Literal, Protocol
 
 from sfm.commands import ColmapCliDialect, build_sfm_pipeline_commands
 from sfm.config import ColmapConfig, ColmapPaths, SourceKind
-from sfm.errors import colmap_failed, colmap_missing, no_reconstruction
+from sfm.errors import SfmError, colmap_failed, colmap_missing, no_reconstruction
 from sfm.parse import ReconstructionSummary, count_input_images, summarize_reconstruction
 
 LOGGER = logging.getLogger("pipeline.sfm")
@@ -173,6 +173,26 @@ def _run_graph(
     return matcher, commands, "\n".join(chunks)
 
 
+# Falhas de qualidade que justificam a tentativa de resgate com SIFT mais sensível.
+_RESCUABLE_CODES = frozenset({"FEW_REGISTERED", "NO_RECONSTRUCTION", "FEW_MATCHES"})
+
+_RESCUE_PEAK_THRESHOLD = 0.004
+_RESCUE_EDGE_THRESHOLD = 15.0
+_RESCUE_MAX_NUM_FEATURES = 16384
+_RESCUE_SEQUENTIAL_OVERLAP = 20
+
+
+def _rescue_plan(config: ColmapConfig) -> ColmapConfig:
+    """SIFT mais sensível + maior sobreposição sequencial, mesmo modo GPU/CPU."""
+    return replace(
+        config,
+        sift_peak_threshold=_RESCUE_PEAK_THRESHOLD,
+        sift_edge_threshold=_RESCUE_EDGE_THRESHOLD,
+        sift_max_num_features=_RESCUE_MAX_NUM_FEATURES,
+        sequential_overlap=max(config.sequential_overlap, _RESCUE_SEQUENTIAL_OVERLAP),
+    )
+
+
 def run_sfm(
     config: ColmapConfig,
     paths: ColmapPaths,
@@ -186,28 +206,18 @@ def run_sfm(
     matcher = config.resolve_matcher(source_kind, image_count=count_input_images(paths.image_dir))
     dialect = probe_cli_dialect(config, runner, matcher)
 
-    attempts = [config]
-    if config.use_gpu:
-        attempts.append(replace(config, use_gpu=False))
-
-    last_failure: _StepFailed | None = None
-    for attempt_index, attempt_config in enumerate(attempts):
+    plans = [config]
+    cpu_tried = not config.use_gpu
+    rescue_tried = False
+    index = 0
+    while index < len(plans):
+        plan = plans[index]
         _clean_work_dir(paths)
-        if attempt_index > 0 and last_failure is not None:
-            LOGGER.warning(
-                "event=colmap_gpu_fallback failed_step=%s detail=%s",
-                last_failure.step,
-                last_failure.detail[:300],
-            )
-            _append_log(
-                paths,
-                f"\n===== GPU attempt failed at `{last_failure.step}`; retrying with use_gpu=0 =====\n",
-            )
-            if progress is not None:
-                progress(0.0, "SIFT em GPU falhou — tentando novamente em CPU…")
+        if index > 0 and progress is not None:
+            progress(0.0, "Tentando novamente com parâmetros ajustados…")
         try:
             matcher, commands, log_text = _run_graph(
-                attempt_config,
+                plan,
                 paths,
                 runner,
                 source_kind=source_kind,
@@ -215,8 +225,21 @@ def run_sfm(
                 progress=progress,
             )
         except _StepFailed as exc:
-            if attempt_config.use_gpu and exc.step in _GPU_DEPENDENT_STEPS:
-                last_failure = exc
+            if plan.use_gpu and exc.step in _GPU_DEPENDENT_STEPS and not cpu_tried:
+                cpu_tried = True
+                plans.append(replace(config, use_gpu=False))
+                LOGGER.warning(
+                    "event=colmap_gpu_fallback failed_step=%s detail=%s",
+                    exc.step,
+                    exc.detail[:300],
+                )
+                _append_log(
+                    paths,
+                    f"\n===== GPU attempt failed at `{exc.step}`; retrying with use_gpu=0 =====\n",
+                )
+                if progress is not None:
+                    progress(0.0, "SIFT em GPU falhou — tentando novamente em CPU…")
+                index += 1
                 continue
             raise colmap_failed(exc.step, exc.detail) from exc
 
@@ -226,25 +249,48 @@ def run_sfm(
             if images_txt_path.is_file()
             else None
         )
-        if images_txt is None and not (paths.model_dir / "images.bin").is_file():
-            raise no_reconstruction("mapper produced no sparse/0 model")
+        try:
+            if images_txt is None and not (paths.model_dir / "images.bin").is_file():
+                raise no_reconstruction("mapper produced no sparse/0 model")
+            summary = summarize_reconstruction(
+                images_txt=images_txt,
+                log_text=log_text,
+                input_image_count=count_input_images(paths.image_dir),
+                min_registered_ratio=plan.min_registered_ratio,
+                min_registered_count=plan.min_registered_count,
+            )
+        except SfmError as exc:
+            if exc.code in _RESCUABLE_CODES and not rescue_tried:
+                rescue_tried = True
+                plans.append(_rescue_plan(plan))
+                LOGGER.warning(
+                    "event=colmap_rescue code=%s used_gpu=%s",
+                    exc.code,
+                    plan.use_gpu,
+                )
+                _append_log(
+                    paths,
+                    f"\n===== quality gate failed ({exc.code}); rescue attempt with relaxed SIFT =====\n",
+                )
+                if progress is not None:
+                    progress(
+                        0.0,
+                        "Poucas imagens registradas — tentando resgate com SIFT mais sensível…",
+                    )
+                index += 1
+                continue
+            raise
 
-        summary = summarize_reconstruction(
-            images_txt=images_txt,
-            log_text=log_text,
-            input_image_count=count_input_images(paths.image_dir),
-            min_registered_ratio=attempt_config.min_registered_ratio,
-            min_registered_count=attempt_config.min_registered_count,
-        )
         if progress is not None:
             progress(1.0, f"{summary.registered_count} imagens registradas.")
         LOGGER.info(
-            "event=sfm_done matcher=%s registered=%s total=%s ratio=%.3f used_gpu=%s",
+            "event=sfm_done matcher=%s registered=%s total=%s ratio=%.3f used_gpu=%s rescue=%s",
             matcher,
             summary.registered_count,
             summary.input_image_count,
             summary.ratio,
-            attempt_config.use_gpu,
+            plan.use_gpu,
+            rescue_tried,
         )
         return SfmResult(
             matcher=matcher,
@@ -254,9 +300,8 @@ def run_sfm(
             images_txt=images_txt_path if images_txt_path.is_file() else None,
             log_text=log_text,
             log_path=paths.work_dir / LOG_FILENAME,
-            used_gpu=attempt_config.use_gpu,
+            used_gpu=plan.use_gpu,
         )
 
-    # Unreachable without a GPU retryable failure, but keeps type-checkers happy.
-    assert last_failure is not None
-    raise colmap_failed(last_failure.step, last_failure.detail)
+    # Unreachable: o laço sempre retorna ou levanta — mantém type-checkers felizes.
+    raise AssertionError("run_sfm exhausted all plans without a result")

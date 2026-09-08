@@ -46,6 +46,12 @@ def build_feature_extractor_command(
     ]
     if gpu_flag is not None:
         argv += [f"--{gpu_flag}", _flag(config.use_gpu)]
+    if config.sift_peak_threshold is not None:
+        argv += ["--SiftExtraction.peak_threshold", f"{config.sift_peak_threshold:g}"]
+    if config.sift_edge_threshold is not None:
+        argv += ["--SiftExtraction.edge_threshold", f"{config.sift_edge_threshold:g}"]
+    if config.sift_max_num_features is not None:
+        argv += ["--SiftExtraction.max_num_features", str(config.sift_max_num_features)]
     return argv
 
 

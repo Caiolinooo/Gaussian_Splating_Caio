@@ -24,6 +24,11 @@ class ColmapConfig:
     min_registered_count: int = 20
     max_exhaustive_images: int = 80
     timeout_s: float | None = None
+    # Ajustes opcionais de SIFT (usados pela tentativa de resgate em cenas
+    # de pouca textura). None = default do COLMAP.
+    sift_peak_threshold: float | None = None
+    sift_edge_threshold: float | None = None
+    sift_max_num_features: int | None = None
 
     def __post_init__(self) -> None:
         if not 0.0 < self.min_registered_ratio <= 1.0:

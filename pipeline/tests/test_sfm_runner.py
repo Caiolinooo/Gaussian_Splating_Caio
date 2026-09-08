@@ -292,3 +292,99 @@ def test_log_file_is_written_even_on_failure(tmp_path: Path) -> None:
     log = (work / "colmap.log").read_text(encoding="utf-8")
     assert "feature_extractor" in log
     assert "boom" in log
+
+
+_ONE_IMAGE_TXT = "# one image\n1 0.1 0.2 0.3 0.4 0.0 1.0 2.0 1 frame_000001.jpg\n100 200 1\n"
+
+
+class _GateFailUntilRescue:
+    """Abaixo do gate de qualidade até a extração rodar com SIFT de resgate."""
+
+    def __init__(self, fail_gpu: bool = False) -> None:
+        self.calls: list[list[str]] = []
+        self.fail_gpu = fail_gpu
+        self.rescued = False
+
+    def run(self, argv: Any, **_kwargs: Any) -> _FakeResult:
+        argv = list(argv)
+        self.calls.append(argv)
+        if "-h" in argv:
+            return _FakeResult(0, stdout=LEGACY_HELP)
+        if self.fail_gpu and _is_gpu_invocation(argv):
+            return _FakeResult(1, stderr="OpenGL context unavailable")
+        step = argv[1]
+        if step == "feature_extractor" and "--SiftExtraction.peak_threshold" in argv:
+            self.rescued = True
+        if step == "mapper":
+            out = Path(argv[argv.index("--output_path") + 1]) / "0"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "images.bin").write_bytes(b"bin")
+        if step == "model_converter":
+            out = Path(argv[argv.index("--output_path") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "images.txt").write_text(
+                IMAGES_TXT if self.rescued else _ONE_IMAGE_TXT, encoding="utf-8"
+            )
+        return _FakeResult(0, stdout=f"{step} ok")
+
+
+def test_few_registered_triggers_rescue_with_relaxed_sift(tmp_path: Path) -> None:
+    work = tmp_path / "colmap"
+    runner = _GateFailUntilRescue()
+    result = run_sfm(
+        _config(use_gpu=False),
+        ColmapPaths(image_dir=_images(tmp_path), work_dir=work),
+        runner,
+        source_kind="images",
+    )
+    assert result.summary.registered_count == 2
+    graph = _graph_calls(runner.calls)
+    extractor_calls = [call for call in graph if call[1] == "feature_extractor"]
+    assert len(extractor_calls) == 2
+    rescue = extractor_calls[1]
+    assert rescue[rescue.index("--SiftExtraction.peak_threshold") + 1] == "0.004"
+    assert rescue[rescue.index("--SiftExtraction.edge_threshold") + 1] == "15"
+    assert rescue[rescue.index("--SiftExtraction.max_num_features") + 1] == "16384"
+    log = (work / "colmap.log").read_text(encoding="utf-8")
+    assert "rescue attempt with relaxed SIFT" in log
+
+
+def test_rescue_exhausted_raises_few_registered(tmp_path: Path) -> None:
+    runner = _GateFailUntilRescue()
+    runner.rescued = False
+
+    class _NeverRescue(_GateFailUntilRescue):
+        def run(self, argv: Any, **kwargs: Any) -> _FakeResult:
+            result = super().run(argv, **kwargs)
+            self.rescued = False  # resgate nunca melhora o modelo
+            return result
+
+    runner2 = _NeverRescue()
+    with pytest.raises(SfmError) as exc:
+        run_sfm(
+            _config(use_gpu=False),
+            ColmapPaths(image_dir=_images(tmp_path), work_dir=tmp_path / "colmap"),
+            runner2,
+            source_kind="images",
+        )
+    assert exc.value.code == "FEW_REGISTERED"
+    extractors = [call for call in _graph_calls(runner2.calls) if call[1] == "feature_extractor"]
+    assert len(extractors) == 2  # original + resgate
+
+
+def test_gpu_fallback_then_rescue_keeps_cpu_mode(tmp_path: Path) -> None:
+    runner = _GateFailUntilRescue(fail_gpu=True)
+    result = run_sfm(
+        _config(),
+        ColmapPaths(image_dir=_images(tmp_path), work_dir=tmp_path / "colmap"),
+        runner,
+        source_kind="images",
+    )
+    assert result.used_gpu is False
+    assert result.summary.registered_count == 2
+    graph = _graph_calls(runner.calls)
+    rescue_extractors = [
+        call for call in graph if call[1] == "feature_extractor" and "--SiftExtraction.peak_threshold" in call
+    ]
+    assert len(rescue_extractors) == 1
+    assert rescue_extractors[0][rescue_extractors[0].index("--SiftExtraction.use_gpu") + 1] == "0"
