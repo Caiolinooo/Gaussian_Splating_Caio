@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Protocol
 
@@ -16,6 +18,12 @@ from sfm.parse import ReconstructionSummary, count_input_images, summarize_recon
 LOGGER = logging.getLogger("pipeline.sfm")
 
 ProgressFn = Callable[[float, str], None]
+
+LOG_FILENAME = "colmap.log"
+
+# Steps whose CLI flags depend on a working GPU/GL stack. A nonzero exit in one
+# of these with ``use_gpu=1`` is retried once in CPU mode (headless-safe).
+_GPU_DEPENDENT_STEPS = frozenset({"feature_extractor", "exhaustive_matcher", "sequential_matcher"})
 
 
 class CommandResult(Protocol):
@@ -35,6 +43,15 @@ class CommandRunner(Protocol):
     ) -> CommandResult: ...
 
 
+class _StepFailed(Exception):
+    """Nonzero COLMAP exit — eligible for the GPU→CPU retry, unlike a missing binary."""
+
+    def __init__(self, step: str, detail: str) -> None:
+        super().__init__(detail)
+        self.step = step
+        self.detail = detail
+
+
 @dataclass(frozen=True)
 class SfmResult:
     matcher: Literal["exhaustive", "sequential"]
@@ -43,6 +60,8 @@ class SfmResult:
     model_dir: Path
     images_txt: Path | None
     log_text: str
+    log_path: Path
+    used_gpu: bool
 
 
 _STEP_LABELS = (
@@ -53,17 +72,29 @@ _STEP_LABELS = (
 )
 
 
-def run_sfm(
+def _append_log(paths: ColmapPaths, text: str) -> None:
+    log_path = paths.work_dir / LOG_FILENAME
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+def _clean_work_dir(paths: ColmapPaths) -> None:
+    """Drop partial state from previous attempts — the SfM stage is atomic."""
+    for suffix in ("", "-wal", "-shm"):
+        paths.database.with_name(paths.database.name + suffix).unlink(missing_ok=True)
+    if paths.sparse_dir.exists():
+        shutil.rmtree(paths.sparse_dir)
+    paths.sparse_dir.mkdir(parents=True, exist_ok=True)
+
+
+def _run_graph(
     config: ColmapConfig,
     paths: ColmapPaths,
     runner: CommandRunner,
     *,
     source_kind: SourceKind,
-    progress: ProgressFn | None = None,
-) -> SfmResult:
-    paths.work_dir.mkdir(parents=True, exist_ok=True)
-    paths.sparse_dir.mkdir(parents=True, exist_ok=True)
-
+    progress: ProgressFn | None,
+) -> tuple[Literal["exhaustive", "sequential"], list[list[str]], str]:
     matcher = config.resolve_matcher(source_kind)
     commands = build_sfm_pipeline_commands(config, paths, source_kind=source_kind)
     chunks: list[str] = []
@@ -84,40 +115,97 @@ def run_sfm(
             raise
         text = f"{result.stdout}\n{result.stderr}"
         chunks.append(text)
+        stamp = datetime.now(UTC).isoformat()
+        _append_log(paths, f"\n===== {stamp} $ {' '.join(argv)} =====\n{text}\n")
         if result.returncode != 0:
             # Converter is best-effort if the text model already exists.
             if argv[1] == "model_converter" and (paths.model_dir / "images.txt").is_file():
                 LOGGER.info("event=colmap_converter_skipped reason=images_txt_exists")
                 continue
-            raise colmap_failed(argv[1], result.stderr.strip() or result.stdout.strip() or "nonzero")
+            raise _StepFailed(argv[1], result.stderr.strip() or result.stdout.strip() or "nonzero")
+    return matcher, commands, "\n".join(chunks)
 
-    log_text = "\n".join(chunks)
-    images_txt_path = paths.model_dir / "images.txt"
-    images_txt = images_txt_path.read_text(encoding="utf-8", errors="replace") if images_txt_path.is_file() else None
-    if images_txt is None and not (paths.model_dir / "images.bin").is_file():
-        raise no_reconstruction("mapper produced no sparse/0 model")
 
-    summary = summarize_reconstruction(
-        images_txt=images_txt,
-        log_text=log_text,
-        input_image_count=count_input_images(paths.image_dir),
-        min_registered_ratio=config.min_registered_ratio,
-        min_registered_count=config.min_registered_count,
-    )
-    if progress is not None:
-        progress(1.0, f"{summary.registered_count} imagens registradas.")
-    LOGGER.info(
-        "event=sfm_done matcher=%s registered=%s total=%s ratio=%.3f",
-        matcher,
-        summary.registered_count,
-        summary.input_image_count,
-        summary.ratio,
-    )
-    return SfmResult(
-        matcher=matcher,
-        commands=tuple(tuple(item) for item in commands),
-        summary=summary,
-        model_dir=paths.model_dir,
-        images_txt=images_txt_path if images_txt_path.is_file() else None,
-        log_text=log_text,
-    )
+def run_sfm(
+    config: ColmapConfig,
+    paths: ColmapPaths,
+    runner: CommandRunner,
+    *,
+    source_kind: SourceKind,
+    progress: ProgressFn | None = None,
+) -> SfmResult:
+    paths.work_dir.mkdir(parents=True, exist_ok=True)
+
+    attempts = [config]
+    if config.use_gpu:
+        attempts.append(replace(config, use_gpu=False))
+
+    last_failure: _StepFailed | None = None
+    for attempt_index, attempt_config in enumerate(attempts):
+        _clean_work_dir(paths)
+        if attempt_index > 0 and last_failure is not None:
+            LOGGER.warning(
+                "event=colmap_gpu_fallback failed_step=%s detail=%s",
+                last_failure.step,
+                last_failure.detail[:300],
+            )
+            _append_log(
+                paths,
+                f"\n===== GPU attempt failed at `{last_failure.step}`; retrying with use_gpu=0 =====\n",
+            )
+            if progress is not None:
+                progress(0.0, "SIFT em GPU falhou — tentando novamente em CPU…")
+        try:
+            matcher, commands, log_text = _run_graph(
+                attempt_config,
+                paths,
+                runner,
+                source_kind=source_kind,
+                progress=progress,
+            )
+        except _StepFailed as exc:
+            if attempt_config.use_gpu and exc.step in _GPU_DEPENDENT_STEPS:
+                last_failure = exc
+                continue
+            raise colmap_failed(exc.step, exc.detail) from exc
+
+        images_txt_path = paths.model_dir / "images.txt"
+        images_txt = (
+            images_txt_path.read_text(encoding="utf-8", errors="replace")
+            if images_txt_path.is_file()
+            else None
+        )
+        if images_txt is None and not (paths.model_dir / "images.bin").is_file():
+            raise no_reconstruction("mapper produced no sparse/0 model")
+
+        summary = summarize_reconstruction(
+            images_txt=images_txt,
+            log_text=log_text,
+            input_image_count=count_input_images(paths.image_dir),
+            min_registered_ratio=attempt_config.min_registered_ratio,
+            min_registered_count=attempt_config.min_registered_count,
+        )
+        if progress is not None:
+            progress(1.0, f"{summary.registered_count} imagens registradas.")
+        LOGGER.info(
+            "event=sfm_done matcher=%s registered=%s total=%s ratio=%.3f used_gpu=%s",
+            matcher,
+            summary.registered_count,
+            summary.input_image_count,
+            summary.ratio,
+            attempt_config.use_gpu,
+        )
+        return SfmResult(
+            matcher=matcher,
+            commands=tuple(tuple(item) for item in commands),
+            summary=summary,
+            model_dir=paths.model_dir,
+            images_txt=images_txt_path if images_txt_path.is_file() else None,
+            log_text=log_text,
+            log_path=paths.work_dir / LOG_FILENAME,
+            used_gpu=attempt_config.use_gpu,
+        )
+
+    # Unreachable without a GPU retryable failure, but keeps type-checkers happy.
+    assert last_failure is not None
+    raise colmap_failed(last_failure.step, last_failure.detail)

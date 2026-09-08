@@ -154,12 +154,14 @@ def handle_sfm(record: JobRecord, progress: Callable[[float, str], None], runner
             "model_dir": str(result.model_dir),
             "database": str(paths.colmap_db),
             "dataset_dir": str(paths.dataset_dir),
+            "log": str(result.log_path),
         },
         metrics={
             "registered": result.summary.registered_count,
             "input_images": result.summary.input_image_count,
             "ratio": result.summary.ratio,
             "matcher": result.matcher,
+            "used_gpu": result.used_gpu,
         },
         message=f"{result.summary.registered_count} imagens registradas.",
     )
