@@ -342,9 +342,27 @@ def detect_colmap() -> ComponentCheck:
                 "O app não recompila e não instala colmap via apt."
             ),
         )
-    first_line: str | None = None
     result = _run([path, "-h"])
-    if result is not None and result.stdout:
+    if result is None or result.returncode != 0:
+        stderr_tail = (result.stderr or "").strip()[-300:] if result is not None else ""
+        return ComponentCheck(
+            key,
+            name,
+            Status.ERROR,
+            f"COLMAP encontrado em {path}, mas `colmap -h` falhou — binário quebrado ou dependência ausente.",
+            details={
+                "path": path,
+                "returncode": result.returncode if result is not None else None,
+                "stderr": stderr_tail,
+            },
+            fix_hint=(
+                "Execute `colmap -h` no terminal do servidor e instale as bibliotecas que ele "
+                "reportar como ausentes (ex.: libGL, libxcb, CUDA runtime). Sem um binário "
+                "funcionando, todo job falha na etapa feature_extractor."
+            ),
+        )
+    first_line: str | None = None
+    if result.stdout:
         first_line = result.stdout.splitlines()[0].strip() or None
     return ComponentCheck(
         key,

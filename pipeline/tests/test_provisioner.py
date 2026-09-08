@@ -1,7 +1,9 @@
 """Testes do Provisioner — independentes do ambiente da máquina."""
 
+import subprocess
+
 from provisioner.bins import resolve_colmap_bin
-from provisioner.detect import Status
+from provisioner.detect import Status, detect_colmap
 from provisioner.health import CHECKERS, run_all_checks
 from provisioner.install import (
     PROVISIONING_PLAN,
@@ -88,6 +90,41 @@ def test_resolve_colmap_prefers_existing_path(tmp_path, monkeypatch) -> None:
     fake.chmod(0o755)
     found = resolve_colmap_bin(str(fake))
     assert found == str(fake.resolve())
+
+
+def _fake_completed(returncode: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args=["colmap", "-h"], returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+def test_detect_colmap_broken_binary_is_error(tmp_path, monkeypatch) -> None:
+    fake = tmp_path / "colmap"
+    fake.write_text("", encoding="utf-8")
+    fake.chmod(0o755)
+    monkeypatch.setattr("provisioner.detect.resolve_colmap_bin", lambda _cfg: str(fake))
+    monkeypatch.setattr(
+        "provisioner.detect._run",
+        lambda cmd, **_: _fake_completed(127, stderr="error while loading shared libraries: libGL.so.1"),
+    )
+    check = detect_colmap()
+    assert check.status is Status.ERROR
+    assert "falhou" in check.message
+    assert check.details["returncode"] == 127
+    assert "libGL" in check.details["stderr"]
+    assert check.fix_hint
+
+
+def test_detect_colmap_healthy_binary_is_ok(tmp_path, monkeypatch) -> None:
+    fake = tmp_path / "colmap"
+    fake.write_text("", encoding="utf-8")
+    fake.chmod(0o755)
+    monkeypatch.setattr("provisioner.detect.resolve_colmap_bin", lambda _cfg: str(fake))
+    monkeypatch.setattr(
+        "provisioner.detect._run",
+        lambda cmd, **_: _fake_completed(0, stdout="COLMAP 3.11 -- Structure-from-Motion\n"),
+    )
+    check = detect_colmap()
+    assert check.status is Status.OK
+    assert check.details["banner"] == "COLMAP 3.11 -- Structure-from-Motion"
 
 
 def test_disk_and_memory_report_positive_numbers() -> None:
