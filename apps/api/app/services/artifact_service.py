@@ -30,6 +30,10 @@ def artifact_relpath(kind: ArtifactKind) -> tuple[str, ...]:
             return ("export", "thumbnails", "preview.jpg")
         case ArtifactKind.LOG:
             return ("colmap", "colmap.log")
+        case ArtifactKind.SCENE:
+            return ("export", "scene.json")
+        case ArtifactKind.PACKAGE:
+            return ("export", "scene.zip")
         case _:
             assert_never(kind)
 
@@ -44,6 +48,10 @@ def media_type_for(kind: ArtifactKind) -> str:
             return "image/jpeg"
         case ArtifactKind.LOG:
             return "text/plain; charset=utf-8"
+        case ArtifactKind.SCENE:
+            return "application/json"
+        case ArtifactKind.PACKAGE:
+            return "application/zip"
         case _:
             assert_never(kind)
 

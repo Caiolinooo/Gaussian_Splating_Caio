@@ -38,8 +38,8 @@ def video_unreadable(path: str, detail: str) -> IngestError:
     return IngestError(
         f"unreadable video: {path}: {detail}",
         user_message=(
-            "Não foi possível ler o vídeo. "
-            "Verifique se o arquivo não está corrompido e tente outro formato (MP4/MOV)."
+            "Não foi possível ler o vídeo ou GIF. "
+            "Verifique se o arquivo não está corrompido e tente outro formato (MP4/MOV/GIF)."
         ),
         code="VIDEO_UNREADABLE",
     )

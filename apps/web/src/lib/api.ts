@@ -47,7 +47,7 @@ export type JobState =
   | 'error'
   | 'cancelled';
 
-export type SourceKind = 'video' | 'images';
+export type SourceKind = 'video' | 'images' | 'gif' | 'ply';
 
 export type StageStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
@@ -264,10 +264,12 @@ export interface CreateJobInput {
 
 function appendJobFields(form: FormData, input: CreateJobInput): void {
   switch (input.sourceKind) {
-    case 'video': {
-      const video = input.files[0];
-      if (video) {
-        form.append('file', video);
+    case 'video':
+    case 'gif':
+    case 'ply': {
+      const single = input.files[0];
+      if (single) {
+        form.append('file', single);
       }
       break;
     }

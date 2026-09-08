@@ -67,6 +67,14 @@ class JobPaths:
         return self.export_dir / "calibration.json"
 
     @property
+    def scene_json(self) -> Path:
+        return self.export_dir / "scene.json"
+
+    @property
+    def scene_package(self) -> Path:
+        return self.export_dir / "scene.zip"
+
+    @property
     def thumbnails_dir(self) -> Path:
         return self.export_dir / "thumbnails"
 

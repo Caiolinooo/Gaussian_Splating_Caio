@@ -14,12 +14,16 @@ import { applyTRSToHost, MinimalObject3D, type HostObject3D } from './hostObject
 import { listOutlinerItems, type OutlinerItem } from './outliner';
 import {
   DEFAULT_CALIBRATION,
+  DEFAULT_RELIGHT,
+  DEFAULT_TEMPORAL,
   type BackgroundSplatJson,
   type CalibrationJson,
   type OverlayJson,
+  type RelightJson,
   type SceneDocument,
   type SceneNodeJson,
   type SceneNodeKind,
+  type TemporalJson,
 } from './sceneSchema';
 import { cloneSceneDocument, parseSceneDocument, serializeSceneDocument } from './serialize';
 
@@ -68,6 +72,8 @@ export class SceneManager {
       nodes: [],
       calibration: { ...DEFAULT_CALIBRATION },
       overlays: [],
+      temporal: { ...DEFAULT_TEMPORAL },
+      relight: { ...DEFAULT_RELIGHT },
     };
   }
 
@@ -191,6 +197,16 @@ export class SceneManager {
     this.execute({ type: 'setOverlays', previous: this.state.overlays, next });
   }
 
+  setTemporal(next: TemporalJson): void {
+    this.state = { ...this.state, temporal: { ...next } };
+    this.emit();
+  }
+
+  setRelight(next: RelightJson): void {
+    this.state = { ...this.state, relight: { ...next } };
+    this.emit();
+  }
+
   undo(): void {
     const command = this.stack.undo();
     if (!command) {
@@ -220,6 +236,8 @@ export class SceneManager {
       nodes: this.state.nodes,
       calibration: this.state.calibration,
       overlays: this.state.overlays,
+      temporal: this.state.temporal,
+      relight: this.state.relight,
     });
   }
 
@@ -235,6 +253,8 @@ export class SceneManager {
       nodes: doc.nodes,
       calibration: doc.calibration,
       overlays: doc.overlays,
+      temporal: doc.temporal,
+      relight: doc.relight,
     };
     this.stack.clear();
     this.rebuildHosts();

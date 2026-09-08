@@ -29,7 +29,7 @@
  */
 
 import type { OverlayDocument } from '@gs/overlays';
-import type { CalibrationJson, SceneDocument } from '@gs/viewer';
+import { parseSceneDocument, type CalibrationJson, type SceneDocument } from '@gs/viewer';
 
 import { getAccessToken, isDevAuthBypass } from './supabase';
 
@@ -278,6 +278,52 @@ async function fetchJobArtifactFromUrl(
   }
   const buffer = await readBinaryWithProgress(response, options.onProgress);
   return { kind, buffer, sourceUrl: remoteUrl };
+}
+
+/** JSON de cena exportado pelo SceneIO (`GET /jobs/{id}/artifacts/scene`). */
+export async function fetchJobSceneDocument(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<SceneDocument | null> {
+  const path = `/jobs/${encodeURIComponent(jobId)}/artifacts/scene`;
+  const url = `${getViewerApiBaseUrl()}${path}`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { Accept: 'application/json', ...(await authHeaders()) },
+      signal,
+    });
+  } catch {
+    throw new ViewerApiError('Não foi possível conectar à API para baixar o JSON da cena.', path);
+  }
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    const detail = await readErrorDetail(response, `Erro ${response.status} ao baixar a cena.`);
+    throw new ViewerApiError(detail, path, response.status);
+  }
+  try {
+    return parseSceneDocument(await response.json());
+  } catch {
+    return null;
+  }
+}
+
+export async function downloadJobPackage(jobId: string): Promise<void> {
+  const path = `/jobs/${encodeURIComponent(jobId)}/artifacts/package`;
+  const url = `${getViewerApiBaseUrl()}${path}`;
+  const response = await fetch(url, { headers: { ...(await authHeaders()) } });
+  if (!response.ok) {
+    throw new ViewerApiError('Pacote de cena ainda não disponível.', path, response.status);
+  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = `job-${jobId}-scene.zip`;
+  anchor.click();
+  URL.revokeObjectURL(objectUrl);
 }
 
 /** Lê a cena versionada. 404 → `null` (o viewer cria um documento vazio). */

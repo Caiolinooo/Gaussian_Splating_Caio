@@ -121,6 +121,33 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
     URL.revokeObjectURL(url);
   }
 
+  async function downloadArtifact(kind: 'scene' | 'package' | 'ply' | 'ksplat', filename: string) {
+    setTechLogError(null);
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/jobs/${encodeURIComponent(jobId)}/artifacts/${kind}`,
+        { headers: { ...(await getAuthHeaders()) } },
+      );
+      if (response.status === 404) {
+        setTechLogError('Artefato ainda não disponível para este job.');
+        return;
+      }
+      if (!response.ok) {
+        setTechLogError(`Erro ${response.status} ao baixar ${filename}.`);
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setTechLogError('Não foi possível conectar à API para baixar o artefato.');
+    }
+  }
+
   async function downloadTechnicalLog() {
     setTechLogError(null);
     try {
@@ -172,9 +199,23 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
             </button>
           )}
           {job?.state === 'done' && (
-            <button type="button" className="primary" onClick={openScene}>
-              Abrir cena
-            </button>
+            <>
+              <button type="button" className="primary" onClick={openScene}>
+                Abrir cena
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadArtifact('scene', `job-${jobId}-scene.json`)}
+              >
+                Baixar JSON da cena
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadArtifact('package', `job-${jobId}-scene.zip`)}
+              >
+                Baixar pacote (.zip)
+              </button>
+            </>
           )}
         </div>
       </header>

@@ -16,6 +16,8 @@ def _plant_artifacts(work_dir: Path) -> None:
     thumbs.mkdir(parents=True, exist_ok=True)
     (export / "master.ply").write_bytes(b"ply-bytes")
     (export / "scene.ksplat").write_bytes(b"ksplat-bytes")
+    (export / "scene.json").write_text('{"schemaVersion":1}', encoding="utf-8")
+    (export / "scene.zip").write_bytes(b"zip-bytes")
     (thumbs / "preview.jpg").write_bytes(b"jpeg-bytes")
 
 
@@ -37,6 +39,14 @@ def test_download_known_artifacts(client_as, runtime) -> None:
         thumb = client.get(f"/jobs/{job_id}/artifacts/thumbnail")
         assert thumb.status_code == 200
         assert thumb.content == b"jpeg-bytes"
+
+        scene = client.get(f"/jobs/{job_id}/artifacts/scene")
+        assert scene.status_code == 200
+        assert b"schemaVersion" in scene.content
+
+        package = client.get(f"/jobs/{job_id}/artifacts/package")
+        assert package.status_code == 200
+        assert package.content == b"zip-bytes"
 
 
 def test_download_log_artifact(client_as, runtime) -> None:

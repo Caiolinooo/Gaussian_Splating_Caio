@@ -26,16 +26,22 @@ export {
 export {
   createEmptySceneDocument,
   DEFAULT_CALIBRATION,
+  DEFAULT_RELIGHT,
+  DEFAULT_TEMPORAL,
   SCENE_SCHEMA_VERSION,
   type BackgroundSplatJson,
   type CalibrationJson,
   type CalibrationSource,
   type OverlayJson,
   type OverlayKind,
+  type RelightJson,
+  type RelightMode,
   type SceneDocument,
   type SceneNodeJson,
   type SceneNodeKind,
   type SceneSchemaVersion,
+  type TemporalJson,
+  type TemporalSourceKind,
 } from './editing/sceneSchema';
 export {
   cloneSceneDocument,

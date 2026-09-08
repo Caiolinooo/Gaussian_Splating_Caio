@@ -25,7 +25,7 @@ export function stageLabel(stage: UiStage): string {
     case 'upload':
       return 'Envio';
     case 'extracting':
-      return 'Extração de frames';
+      return 'Ingestão';
     case 'sfm':
       return 'Reconstrução (SfM)';
     case 'training':
@@ -91,12 +91,16 @@ export function stageStatusLabel(status: StageStatus): string {
   }
 }
 
-export function sourceKindLabel(kind: 'video' | 'images'): string {
+export function sourceKindLabel(kind: 'video' | 'images' | 'gif' | 'ply'): string {
   switch (kind) {
     case 'video':
       return 'Vídeo';
     case 'images':
       return 'Imagens';
+    case 'gif':
+      return 'GIF';
+    case 'ply':
+      return 'PLY';
     default: {
       const exhaustive: never = kind;
       throw new Error(`Tipo de origem não tratado: ${String(exhaustive)}`);
@@ -146,7 +150,7 @@ export function asDisplayPercent(progress: number): number {
 export function buildTimeline(
   stages: Partial<Record<PipelineStage, StageProgress>>,
   jobState: JobState,
-  sourceKind?: 'video' | 'images',
+  sourceKind?: 'video' | 'images' | 'gif' | 'ply',
 ): TimelineItem[] {
   const upload: TimelineItem = {
     key: 'upload',
@@ -162,8 +166,24 @@ export function buildTimeline(
     if (!record && sourceKind === 'images' && key === 'extracting') {
       status = 'skipped';
     }
+    if (
+      !record &&
+      sourceKind === 'ply' &&
+      (key === 'sfm' || key === 'training' || key === 'autocal')
+    ) {
+      status = 'skipped';
+    }
     if (!record && jobState === 'done') {
-      status = key === 'extracting' && sourceKind === 'images' ? 'skipped' : 'done';
+      if (key === 'extracting' && sourceKind === 'images') {
+        status = 'skipped';
+      } else if (
+        sourceKind === 'ply' &&
+        (key === 'sfm' || key === 'training' || key === 'autocal')
+      ) {
+        status = 'skipped';
+      } else {
+        status = 'done';
+      }
     }
     const progress = normalizeProgress(
       record?.progress ?? (status === 'done' || status === 'skipped' ? 1 : 0),
@@ -171,6 +191,15 @@ export function buildTimeline(
     let detail = record?.message ?? undefined;
     if (status === 'skipped' && key === 'extracting') {
       detail = detail ?? 'Conjunto de imagens — extração de frames não é necessária.';
+    }
+    if (status === 'skipped' && sourceKind === 'ply' && key === 'sfm') {
+      detail = detail ?? 'PLY já é splat — SfM não é necessário.';
+    }
+    if (status === 'skipped' && sourceKind === 'ply' && key === 'training') {
+      detail = detail ?? 'PLY já é splat — treino 3DGS não é necessário.';
+    }
+    if (status === 'skipped' && sourceKind === 'ply' && key === 'autocal') {
+      detail = detail ?? 'PLY importado — auto-calibração por frames não se aplica.';
     }
     return {
       key,

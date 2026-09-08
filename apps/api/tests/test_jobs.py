@@ -11,7 +11,7 @@ from app.core.auth import CurrentUser, get_current_user
 from app.main import create_app
 from tests.conftest import build_fake_runtime, make_settings
 from tests.fakes import FakeJobMachine, FakeRecord, FakeSource, FakeStage
-from tests.helpers import image_files, job_form, video_files
+from tests.helpers import gif_files, image_files, job_form, ply_files, video_files
 
 
 def test_upload_video_returns_202(client_as) -> None:
@@ -28,6 +28,33 @@ def test_upload_images_returns_202(client_as) -> None:
         response = client.post("/jobs", files=image_files(20), data=job_form(key="imgs-1"))
     assert response.status_code == 202
     assert response.json()["state"] == "queued"
+
+
+def test_upload_gif_returns_202(client_as, runtime) -> None:
+    with client_as("user-a") as client:
+        response = client.post("/jobs", files=gif_files(), data=job_form(key="gif-1"))
+    assert response.status_code == 202
+    record = runtime.machine.get(response.json()["job_id"])
+    assert record.source.kind == "gif"
+
+
+def test_upload_ply_returns_202(client_as, runtime) -> None:
+    with client_as("user-a") as client:
+        response = client.post("/jobs", files=ply_files(), data=job_form(key="ply-1"))
+    assert response.status_code == 202
+    record = runtime.machine.get(response.json()["job_id"])
+    assert record.source.kind == "ply"
+
+
+def test_upload_rejects_invalid_ply_header(client_as) -> None:
+    with client_as("user-a") as client:
+        response = client.post(
+            "/jobs",
+            files={"file": ("scan.ply", b"not-a-ply", "application/octet-stream")},
+            data=job_form(key="bad-ply"),
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "INVALID_PLY"
 
 
 def test_upload_rejects_invalid_video_extension(client_as) -> None:

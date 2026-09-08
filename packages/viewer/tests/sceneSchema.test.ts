@@ -1,7 +1,12 @@
 import { defaultMaskByNormal, defaultTransform } from '@gs/overlays/types';
 import { describe, expect, it } from 'vitest';
 
-import { createEmptySceneDocument, SCENE_SCHEMA_VERSION } from '../src/editing/sceneSchema';
+import {
+  createEmptySceneDocument,
+  DEFAULT_RELIGHT,
+  DEFAULT_TEMPORAL,
+  SCENE_SCHEMA_VERSION,
+} from '../src/editing/sceneSchema';
 import {
   cloneSceneDocument,
   parseSceneDocument,
@@ -75,6 +80,20 @@ const sample = {
       },
     },
   ],
+  temporal: {
+    enabled: true,
+    frameCount: 24,
+    durationS: 2.4,
+    fps: 10,
+    currentTime: 0,
+    sourceKind: 'gif' as const,
+  },
+  relight: {
+    enabled: false,
+    mode: 'unsupported' as const,
+    hasSphericalHarmonics: true,
+    shDegree: 2,
+  },
 };
 
 describe('JSON de cena', () => {
@@ -99,7 +118,23 @@ describe('JSON de cena', () => {
     expect(parsed.nodes).toEqual([]);
     expect(parsed.overlays).toEqual([]);
     expect(parsed.calibration.source).toBe('none');
+    expect(parsed.temporal).toEqual(DEFAULT_TEMPORAL);
+    expect(parsed.relight).toEqual(DEFAULT_RELIGHT);
     expect(parsed.schemaVersion).toBe(1);
+  });
+
+  it('preenche temporal/relight ausentes em documentos antigos', () => {
+    const parsed = parseSceneDocument({
+      schemaVersion: 1,
+      id: 'legacy',
+      name: 'Antiga',
+      backgroundSplat: null,
+      nodes: [],
+      calibration: {},
+      overlays: [],
+    });
+    expect(parsed.temporal.enabled).toBe(false);
+    expect(parsed.relight.mode).toBe('unsupported');
   });
 
   it('rejeita schemaVersion desconhecido', () => {

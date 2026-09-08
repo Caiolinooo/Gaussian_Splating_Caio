@@ -1,4 +1,5 @@
 import {
+  GIF_EXTENSIONS,
   IMAGE_EXTENSIONS,
   MAX_IMAGE_BYTES,
   MAX_IMAGES,
@@ -9,6 +10,7 @@ import {
   MIN_IMAGE_WIDTH,
   MIN_IMAGES,
   MIN_VIDEO_DURATION_S,
+  PLY_EXTENSIONS,
   VIDEO_EXTENSIONS,
 } from './constants';
 import type { SourceKind } from './types';
@@ -26,6 +28,8 @@ export interface FileClassification {
   kind: MediaKind;
   videos: NamedBlob[];
   images: NamedBlob[];
+  gifs: NamedBlob[];
+  plys: NamedBlob[];
   others: NamedBlob[];
 }
 
@@ -49,7 +53,20 @@ function isVideoFile(file: NamedBlob): boolean {
   return file.type.startsWith('video/');
 }
 
+function isGifFile(file: NamedBlob): boolean {
+  const ext = extensionOf(file);
+  return (GIF_EXTENSIONS as readonly string[]).includes(ext) || file.type === 'image/gif';
+}
+
+function isPlyFile(file: NamedBlob): boolean {
+  const ext = extensionOf(file);
+  return (PLY_EXTENSIONS as readonly string[]).includes(ext);
+}
+
 function isImageFile(file: NamedBlob): boolean {
+  if (isGifFile(file)) {
+    return false;
+  }
   const ext = extensionOf(file);
   if ((IMAGE_EXTENSIONS as readonly string[]).includes(ext)) {
     return true;
@@ -60,8 +77,18 @@ function isImageFile(file: NamedBlob): boolean {
 export function classifyFiles(files: readonly NamedBlob[]): FileClassification {
   const videos: NamedBlob[] = [];
   const images: NamedBlob[] = [];
+  const gifs: NamedBlob[] = [];
+  const plys: NamedBlob[] = [];
   const others: NamedBlob[] = [];
   for (const file of files) {
+    if (isPlyFile(file)) {
+      plys.push(file);
+      continue;
+    }
+    if (isGifFile(file)) {
+      gifs.push(file);
+      continue;
+    }
     if (isVideoFile(file) && !isImageFile(file)) {
       videos.push(file);
       continue;
@@ -76,22 +103,31 @@ export function classifyFiles(files: readonly NamedBlob[]): FileClassification {
     }
     others.push(file);
   }
+  const buckets = [videos.length > 0, images.length > 0, gifs.length > 0, plys.length > 0].filter(
+    Boolean,
+  ).length;
   if (files.length === 0) {
-    return { kind: 'empty', videos, images, others };
+    return { kind: 'empty', videos, images, gifs, plys, others };
   }
   if (others.length > 0) {
-    return { kind: 'unknown', videos, images, others };
+    return { kind: 'unknown', videos, images, gifs, plys, others };
   }
-  if (videos.length > 0 && images.length > 0) {
-    return { kind: 'mixed', videos, images, others };
+  if (buckets > 1) {
+    return { kind: 'mixed', videos, images, gifs, plys, others };
+  }
+  if (plys.length > 0) {
+    return { kind: 'ply', videos, images, gifs, plys, others };
+  }
+  if (gifs.length > 0) {
+    return { kind: 'gif', videos, images, gifs, plys, others };
   }
   if (videos.length > 0) {
-    return { kind: 'video', videos, images, others };
+    return { kind: 'video', videos, images, gifs, plys, others };
   }
   if (images.length > 0) {
-    return { kind: 'images', videos, images, others };
+    return { kind: 'images', videos, images, gifs, plys, others };
   }
-  return { kind: 'unknown', videos, images, others };
+  return { kind: 'unknown', videos, images, gifs, plys, others };
 }
 
 export function formatBytes(bytes: number): string {
@@ -182,22 +218,64 @@ export function validateFilesSync(files: readonly NamedBlob[]): SyncValidationRe
       return {
         ok: false,
         kind: classified.kind,
-        errors: ['Envie um vídeo ou um conjunto de imagens do ambiente.'],
+        errors: ['Envie um vídeo, um GIF, um PLY ou um conjunto de imagens do ambiente.'],
       };
     case 'unknown':
       return {
         ok: false,
         kind: classified.kind,
         errors: [
-          'Há arquivos com formato não reconhecido. Use vídeo MP4/MOV/WEBM ou imagens JPG/PNG/HEIC.',
+          'Há arquivos com formato não reconhecido. Use vídeo MP4/MOV/WEBM, GIF, PLY ou imagens JPG/PNG/HEIC.',
         ],
       };
     case 'mixed':
       return {
         ok: false,
         kind: classified.kind,
-        errors: ['Envie só um vídeo ou só imagens — não misture os dois no mesmo job.'],
+        errors: ['Envie só um tipo de origem — vídeo, GIF, PLY ou imagens, sem misturar.'],
       };
+    case 'gif':
+      if (classified.gifs.length !== 1) {
+        return {
+          ok: false,
+          kind: classified.kind,
+          errors: ['Envie um único GIF por job.'],
+        };
+      }
+      {
+        const gif = classified.gifs[0]!;
+        const errors: string[] = [];
+        if (gif.size === 0) {
+          errors.push('O GIF está vazio.');
+        }
+        if (gif.size > MAX_VIDEO_BYTES) {
+          errors.push(
+            `O GIF tem ${formatBytes(gif.size)}. O limite é ${formatBytes(MAX_VIDEO_BYTES)}.`,
+          );
+        }
+        return { ok: errors.length === 0, kind: 'gif', errors };
+      }
+    case 'ply':
+      if (classified.plys.length !== 1) {
+        return {
+          ok: false,
+          kind: classified.kind,
+          errors: ['Envie um único arquivo .ply por job.'],
+        };
+      }
+      {
+        const ply = classified.plys[0]!;
+        const errors: string[] = [];
+        if (ply.size === 0) {
+          errors.push('O arquivo PLY está vazio.');
+        }
+        if (ply.size > MAX_VIDEO_BYTES) {
+          errors.push(
+            `O PLY tem ${formatBytes(ply.size)}. O limite é ${formatBytes(MAX_VIDEO_BYTES)}.`,
+          );
+        }
+        return { ok: errors.length === 0, kind: 'ply', errors };
+      }
     case 'video':
       if (classified.videos.length !== 1) {
         return {

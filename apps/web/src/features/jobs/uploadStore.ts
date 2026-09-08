@@ -72,7 +72,13 @@ export const useUploadStore = create<UploadStore>((set, get) => ({
 
   setFiles: (files) => {
     const result = validateFilesSync(files);
-    const kind = result.kind === 'video' || result.kind === 'images' ? result.kind : null;
+    const kind =
+      result.kind === 'video' ||
+      result.kind === 'images' ||
+      result.kind === 'gif' ||
+      result.kind === 'ply'
+        ? result.kind
+        : null;
     set({
       files,
       sourceKind: kind,
@@ -95,7 +101,13 @@ export const useUploadStore = create<UploadStore>((set, get) => ({
   probeMedia: async () => {
     const { files, sourceKind } = get();
     const sync = validateFilesSync(files);
-    if (!sync.ok || (sync.kind !== 'video' && sync.kind !== 'images')) {
+    if (
+      !sync.ok ||
+      (sync.kind !== 'video' &&
+        sync.kind !== 'images' &&
+        sync.kind !== 'gif' &&
+        sync.kind !== 'ply')
+    ) {
       set({ fileErrors: sync.errors, sourceKind: null });
       return false;
     }

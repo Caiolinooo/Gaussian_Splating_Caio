@@ -1,5 +1,5 @@
-import type { BackendDetection, SplatQuality } from '@gs/viewer';
-import { DEFAULT_SPLAT_QUALITY } from '@gs/viewer';
+import type { BackendDetection, RelightJson, SplatQuality, TemporalJson } from '@gs/viewer';
+import { DEFAULT_RELIGHT, DEFAULT_SPLAT_QUALITY, DEFAULT_TEMPORAL } from '@gs/viewer';
 import { create } from 'zustand';
 
 import type { CameraPreset } from '../types';
@@ -23,6 +23,8 @@ export interface ViewerStore {
   dirty: boolean;
   saving: boolean;
   lastSavedAt: number | null;
+  temporal: TemporalJson;
+  relight: RelightJson;
   setIds: (ids: { jobId?: string | null; sceneId?: string | null }) => void;
   setSceneName: (name: string) => void;
   setLoad: (phase: LoadPhase, ratio?: number, label?: string) => void;
@@ -34,6 +36,8 @@ export interface ViewerStore {
   markDirty: (dirty?: boolean) => void;
   setSaving: (saving: boolean) => void;
   markSaved: () => void;
+  setTemporal: (temporal: TemporalJson) => void;
+  setRelight: (relight: RelightJson) => void;
 }
 
 export const useViewerStore = create<ViewerStore>((set) => ({
@@ -53,6 +57,8 @@ export const useViewerStore = create<ViewerStore>((set) => ({
   dirty: false,
   saving: false,
   lastSavedAt: null,
+  temporal: { ...DEFAULT_TEMPORAL },
+  relight: { ...DEFAULT_RELIGHT },
 
   setIds(ids) {
     set((state) => ({
@@ -94,5 +100,11 @@ export const useViewerStore = create<ViewerStore>((set) => ({
   },
   markSaved() {
     set({ dirty: false, saving: false, lastSavedAt: Date.now() });
+  },
+  setTemporal(temporal) {
+    set({ temporal });
+  },
+  setRelight(relight) {
+    set({ relight });
   },
 }));

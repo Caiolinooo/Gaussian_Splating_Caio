@@ -48,6 +48,13 @@ describe('remainingEtaLabel', () => {
 });
 
 describe('buildTimeline', () => {
+  it('marca SfM/treino como pulados em PLY', () => {
+    const items = buildTimeline({}, 'queued', 'ply');
+    expect(items.find((item) => item.key === 'sfm')?.status).toBe('skipped');
+    expect(items.find((item) => item.key === 'training')?.status).toBe('skipped');
+    expect(items.find((item) => item.key === 'autocal')?.status).toBe('skipped');
+  });
+
   it('marca extração como pulada em conjunto de imagens', () => {
     const items = buildTimeline({}, 'queued', 'images');
     const extracting = items.find((item) => item.key === 'extracting');

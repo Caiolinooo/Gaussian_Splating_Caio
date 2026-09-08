@@ -16,7 +16,10 @@ from app.core.errors import unprocessable
 LOGGER = logging.getLogger("gs.api.upload")
 
 VIDEO_EXTENSIONS: frozenset[str] = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"})
+GIF_EXTENSIONS: frozenset[str] = frozenset({".gif"})
+PLY_EXTENSIONS: frozenset[str] = frozenset({".ply"})
 IMAGE_EXTENSIONS: frozenset[str] = frozenset({".jpg", ".jpeg", ".png", ".heic", ".heif"})
+SINGLE_FILE_EXTENSIONS: frozenset[str] = VIDEO_EXTENSIONS | GIF_EXTENSIONS | PLY_EXTENSIONS
 MIN_HEIGHT_M = 0.5
 MAX_HEIGHT_M = 2.8
 
@@ -135,22 +138,34 @@ async def save_uploads(
     if video is not None:
         filename = safe_filename(video.filename, "video.mp4")
         ext = suffix_of(filename)
-        if ext not in VIDEO_EXTENSIONS:
+        if ext not in SINGLE_FILE_EXTENSIONS:
             raise unprocessable(
-                f"Extensão de vídeo não suportada ({ext or 'sem extensão'}). Use mp4, mov, mkv, webm ou avi.",
+                f"Extensão não suportada ({ext or 'sem extensão'}). "
+                "Use mp4, mov, mkv, webm, avi, gif ou ply.",
                 "INVALID_VIDEO_EXTENSION",
             )
         dest = upload_dir / filename
         await _write_upload(video, dest, budget)
-        duration = _probe_duration_s(dest, settings.tool_ffprobe)
-        if duration is not None and duration > settings.max_video_duration_s:
-            dest.unlink(missing_ok=True)
-            minutes = int(settings.max_video_duration_s // 60)
-            raise unprocessable(
-                f"O vídeo é longo demais (máximo {minutes} minutos).",
-                "VIDEO_TOO_LONG",
-            )
-        return SavedUpload(source_kind="video", paths=(dest,), original_names=(filename,))
+        if ext in PLY_EXTENSIONS:
+            header = dest.read_bytes()[:4]
+            if not header.lower().startswith(b"ply"):
+                dest.unlink(missing_ok=True)
+                raise unprocessable(
+                    "O arquivo .ply não tem cabeçalho válido (esperado `ply`).",
+                    "INVALID_PLY",
+                )
+            return SavedUpload(source_kind="ply", paths=(dest,), original_names=(filename,))
+        if ext not in GIF_EXTENSIONS:
+            duration = _probe_duration_s(dest, settings.tool_ffprobe)
+            if duration is not None and duration > settings.max_video_duration_s:
+                dest.unlink(missing_ok=True)
+                minutes = int(settings.max_video_duration_s // 60)
+                raise unprocessable(
+                    f"O vídeo é longo demais (máximo {minutes} minutos).",
+                    "VIDEO_TOO_LONG",
+                )
+        kind = "gif" if ext in GIF_EXTENSIONS else "video"
+        return SavedUpload(source_kind=kind, paths=(dest,), original_names=(filename,))
 
     if len(images) < settings.min_images:
         raise unprocessable(

@@ -68,7 +68,7 @@ export function JobsListPage({ onOpenJob, onNewUpload, onOpenScene }: JobsListPa
         <div className="jobs-empty">
           <p>Você ainda não enviou nenhum material.</p>
           <button type="button" className="primary" onClick={onNewUpload}>
-            Enviar vídeo ou imagens
+            Novo job (vídeo, GIF, PLY ou fotos)
           </button>
         </div>
       )}

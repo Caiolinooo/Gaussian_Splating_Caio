@@ -21,8 +21,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { createOverlayUnitsPort, createViewerUnitsPort, toMeters } from '../../../lib/unitsBinding';
 import {
+  downloadJobPackage as fetchJobPackageDownload,
   extractCalibrationExtras,
   fetchJobArtifact,
+  fetchJobSceneDocument,
   fetchScene,
   isMissingSplatArtifact,
   mergeCalibrationForApi,
@@ -201,6 +203,7 @@ export class ViewerController {
       } else if (options.jobId) {
         await this.loadSplatFromJob(options.jobId);
         this.installEmptyBackground(options.jobId);
+        await this.applyExportedScene(options.jobId);
         this.syncCalibrationFromManager();
         this.decideGate(options.sceneId);
       } else {
@@ -259,6 +262,49 @@ export class ViewerController {
     }
     this.splatRenderer.setQuality(patch);
     useViewerStore.getState().setQuality(this.splatRenderer.getQuality());
+  }
+
+  setPlaybackTime(normalized: number): void {
+    const clamped = Math.max(0, Math.min(1, normalized));
+    this.splatRenderer?.setTime(clamped);
+    const current = this.sceneManager.getState().temporal;
+    const next = { ...current, currentTime: clamped };
+    this.sceneManager.setTemporal(next);
+    useViewerStore.getState().setTemporal(next);
+  }
+
+  setRelightPreview(enabled: boolean): void {
+    this.splatRenderer?.setRelightEnabled(enabled);
+    const current = this.sceneManager.getState().relight;
+    const next = { ...current, enabled };
+    this.sceneManager.setRelight(next);
+    useViewerStore.getState().setRelight(next);
+  }
+
+  downloadSceneJson(): void {
+    const json = this.sceneManager.toJSON();
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const id = this.sceneManager.getState().id || 'cena';
+    anchor.href = url;
+    anchor.download = `${id}.scene.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async downloadJobPackage(): Promise<void> {
+    const jobId = useViewerStore.getState().jobId;
+    if (!jobId) {
+      return;
+    }
+    try {
+      await fetchJobPackageDownload(jobId);
+    } catch (error) {
+      useViewerStore
+        .getState()
+        .setError(error instanceof Error ? error.message : 'Falha ao baixar o pacote da cena.');
+    }
   }
 
   cycleShDegree(): void {
@@ -560,8 +606,34 @@ export class ViewerController {
       store.setLoad('ready', 1, '');
     }
     this.syncCalibrationFromManager();
+    this.syncTemporalFromManager();
     this.decideGate(sceneId);
     this.tagHosts();
+  }
+
+  private async applyExportedScene(jobId: string): Promise<void> {
+    try {
+      const document = await fetchJobSceneDocument(jobId);
+      if (!document) {
+        return;
+      }
+      this.sceneManager.setTemporal(document.temporal);
+      this.sceneManager.setRelight(document.relight);
+      if (document.calibration.source !== 'none') {
+        this.sceneManager.setCalibration(document.calibration);
+      }
+      this.syncTemporalFromManager();
+    } catch {
+      // JSON de cena ainda não existe — o splat sozinho basta.
+    }
+  }
+
+  private syncTemporalFromManager(): void {
+    const state = this.sceneManager.getState();
+    useViewerStore.getState().setTemporal(state.temporal);
+    useViewerStore.getState().setRelight(state.relight);
+    this.splatRenderer?.setTime(state.temporal.currentTime);
+    this.splatRenderer?.setRelightEnabled(state.relight.enabled);
   }
 
   private async loadSplatFromJob(jobId: string): Promise<void> {

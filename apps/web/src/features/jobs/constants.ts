@@ -1,9 +1,13 @@
 export const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm'] as const;
+export const GIF_EXTENSIONS = ['.gif'] as const;
+export const PLY_EXTENSIONS = ['.ply'] as const;
 export const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.heic', '.heif'] as const;
 
 export const VIDEO_ACCEPT = '.mp4,.mov,.webm,video/mp4,video/quicktime,video/webm';
+export const GIF_ACCEPT = '.gif,image/gif';
+export const PLY_ACCEPT = '.ply,application/octet-stream';
 export const IMAGE_ACCEPT = '.jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png,image/heic';
-export const MEDIA_ACCEPT = `${VIDEO_ACCEPT},${IMAGE_ACCEPT}`;
+export const MEDIA_ACCEPT = `${VIDEO_ACCEPT},${GIF_ACCEPT},${PLY_ACCEPT},${IMAGE_ACCEPT}`;
 
 /** 2 GiB — walkthrough 4K de alguns minutos. */
 export const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;

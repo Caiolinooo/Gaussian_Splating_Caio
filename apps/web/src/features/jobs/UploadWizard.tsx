@@ -56,7 +56,7 @@ export function UploadWizard({ onSubmitted, onCancel }: UploadWizardProps) {
         <div>
           <h1>Novo processamento</h1>
           <p className="muted">
-            Envie um vídeo ou um conjunto de imagens e informe a sua altura. Nada mais é exigido.
+            Envie um vídeo, um GIF, um PLY ou um conjunto de imagens e informe a sua altura.
           </p>
         </div>
         {onCancel && (
@@ -73,7 +73,7 @@ export function UploadWizard({ onSubmitted, onCancel }: UploadWizardProps) {
 
       {store.step === 1 && (
         <section className="jobs-wizard" aria-labelledby="upload-files-title">
-          <h2 id="upload-files-title">Vídeo ou imagens</h2>
+          <h2 id="upload-files-title">Vídeo, GIF, PLY ou imagens</h2>
           <label
             className={dragOver ? 'jobs-drop is-over' : 'jobs-drop'}
             onDragOver={(event) => {
@@ -96,9 +96,10 @@ export function UploadWizard({ onSubmitted, onCancel }: UploadWizardProps) {
                 store.setFiles(Array.from(event.target.files ?? []));
               }}
             />
-            <strong>Arraste o vídeo ou as fotos aqui</strong>
+            <strong>Arraste o arquivo aqui</strong>
             <p className="muted">
-              Vídeo: MP4, MOV ou WEBM (10 s–15 min). Imagens: pelo menos 20 fotos JPG/PNG/HEIC.
+              Vídeo MP4/MOV/WEBM, GIF (frames), PLY (splat pronto, sem SfM) ou pelo menos 20 fotos
+              JPG/PNG/HEIC.
             </p>
           </label>
 
@@ -107,6 +108,17 @@ export function UploadWizard({ onSubmitted, onCancel }: UploadWizardProps) {
               <video src={objectUrls[0].url} controls preload="metadata" />
               <span className="jobs-preview-name">{objectUrls[0].file.name}</span>
             </div>
+          )}
+
+          {store.sourceKind === 'gif' && objectUrls[0] && (
+            <div className="jobs-video-preview">
+              <img src={objectUrls[0].url} alt={objectUrls[0].file.name} />
+              <span className="jobs-preview-name">{objectUrls[0].file.name}</span>
+            </div>
+          )}
+
+          {store.sourceKind === 'ply' && objectUrls[0] && (
+            <p className="jobs-preview-name">Splat pronto: {objectUrls[0].file.name}</p>
           )}
 
           {store.sourceKind === 'images' && (

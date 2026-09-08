@@ -55,8 +55,14 @@ const MIN_PLACEHOLDER = 640;
 
 export async function collectMediaErrors(
   files: readonly File[],
-  kind: 'video' | 'images',
+  kind: 'video' | 'images' | 'gif' | 'ply',
 ): Promise<string[]> {
+  if (kind === 'ply') {
+    return [];
+  }
+  if (kind === 'gif') {
+    return [];
+  }
   if (kind === 'video') {
     const video = files[0];
     if (!video) {

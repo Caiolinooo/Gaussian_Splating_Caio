@@ -18,6 +18,14 @@ def video_files(name: str = "walk.mp4", content: bytes = b"fake-mp4") -> dict[st
     return {"file": (name, content, "video/mp4")}
 
 
+def gif_files(name: str = "loop.gif", content: bytes = b"fake-gif") -> dict[str, Any]:
+    return {"file": (name, content, "image/gif")}
+
+
+def ply_files(name: str = "scan.ply", content: bytes = b"ply\nformat ascii 1.0\nend_header\n") -> dict[str, Any]:
+    return {"file": (name, content, "application/octet-stream")}
+
+
 def image_files(count: int, *, field: str = "files[]") -> list[tuple[str, tuple[str, bytes, str]]]:
     return [(field, (f"frame_{index:03d}.jpg", b"fake-jpg", "image/jpeg")) for index in range(count)]
 

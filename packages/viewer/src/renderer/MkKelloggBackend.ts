@@ -49,6 +49,8 @@ export class MkKelloggBackend implements SplatRenderer {
   private readonly objectUrls: string[] = [];
   private quality: SplatQuality;
   private playing = false;
+  private time = 0;
+  private relightEnabled = false;
   private disposed = false;
   private nextIndex = 0;
   private viewerParent: SceneParent | null = null;
@@ -181,6 +183,22 @@ export class MkKelloggBackend implements SplatRenderer {
 
   isPlaying(): boolean {
     return this.playing;
+  }
+
+  setTime(normalized: number): void {
+    this.time = Math.max(0, Math.min(1, normalized));
+  }
+
+  getTime(): number {
+    return this.time;
+  }
+
+  setRelightEnabled(enabled: boolean): void {
+    this.relightEnabled = enabled;
+  }
+
+  isRelightEnabled(): boolean {
+    return this.relightEnabled;
   }
 
   getGaussianCount(handle?: SplatHandle): number {

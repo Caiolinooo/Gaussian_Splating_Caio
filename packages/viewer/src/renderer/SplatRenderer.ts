@@ -134,12 +134,22 @@ export interface SplatRenderer {
 
   getQuality(): SplatQuality;
 
-  /** Reprodução temporal (Fase 6). No MVP só altera o flag interno. */
+  /** Reprodução temporal (Fase 6 / GIF). Sem treino 4DGS — só o relógio do contrato. */
   play(): void;
 
   pause(): void;
 
   isPlaying(): boolean;
+
+  /** Tempo normalizado 0–1 (scrubber). Backends sem 4D só guardam o valor. */
+  setTime(normalized: number): void;
+
+  getTime(): number;
+
+  /** Preview de relight. `unsupported` no contrato até existir backend. */
+  setRelightEnabled(enabled: boolean): void;
+
+  isRelightEnabled(): boolean;
 
   /** Contagem de gaussianas (de um splat ou soma de todos). */
   getGaussianCount(handle?: SplatHandle): number;

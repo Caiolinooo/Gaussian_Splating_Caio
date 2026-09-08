@@ -4,7 +4,9 @@ import type {
   BackgroundSplatJson,
   CalibrationJson,
   OverlayJson,
+  RelightJson,
   SceneNodeJson,
+  TemporalJson,
 } from './sceneSchema';
 
 export interface SceneState {
@@ -14,6 +16,8 @@ export interface SceneState {
   nodes: SceneNodeJson[];
   calibration: CalibrationJson;
   overlays: OverlayJson[];
+  temporal: TemporalJson;
+  relight: RelightJson;
 }
 
 export type EditorOp =
@@ -181,6 +185,8 @@ function cloneState(state: SceneState): SceneState {
     nodes: state.nodes.map(cloneNode),
     calibration: structuredClone(state.calibration),
     overlays: state.overlays.map((overlay) => structuredClone(overlay)),
+    temporal: structuredClone(state.temporal),
+    relight: structuredClone(state.relight),
   };
 }
 

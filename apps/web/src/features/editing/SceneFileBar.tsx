@@ -11,6 +11,7 @@ export function SceneFileBar() {
   const saving = useViewerStore((state) => state.saving);
   const sceneId = useViewerStore((state) => state.sceneId);
   const sceneName = useViewerStore((state) => state.sceneName);
+  const jobId = useViewerStore((state) => state.jobId);
   const calibrated = useCalibrationStore((state) => isCalibrated(state.calibration));
   const fileRef = useRef<HTMLInputElement>(null);
   const [openId, setOpenId] = useState(sceneId ?? '');
@@ -63,6 +64,14 @@ export function SceneFileBar() {
       >
         Importar GLB
       </button>
+      <button type="button" onClick={() => controller?.downloadSceneJson()}>
+        Baixar JSON
+      </button>
+      {jobId && (
+        <button type="button" onClick={() => void controller?.downloadJobPackage()}>
+          Baixar pacote
+        </button>
+      )}
     </div>
   );
 }

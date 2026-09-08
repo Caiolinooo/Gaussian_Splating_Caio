@@ -41,6 +41,42 @@ export interface SceneNodeJson {
  * Scene calibration fragment. Matches autocal `to_scene_dict()` camelCase
  * plus optional live-tape `reference` and initial `source: "none"`.
  */
+export type TemporalSourceKind = 'none' | 'gif' | 'video' | 'sequence';
+
+export interface TemporalJson {
+  enabled: boolean;
+  frameCount: number;
+  durationS: number | null;
+  fps: number | null;
+  currentTime: number;
+  sourceKind: TemporalSourceKind;
+}
+
+export type RelightMode = 'baked-sh' | 'preview' | 'unsupported';
+
+export interface RelightJson {
+  enabled: boolean;
+  mode: RelightMode;
+  hasSphericalHarmonics: boolean;
+  shDegree: number | null;
+}
+
+export const DEFAULT_TEMPORAL: TemporalJson = Object.freeze({
+  enabled: false,
+  frameCount: 0,
+  durationS: null,
+  fps: null,
+  currentTime: 0,
+  sourceKind: 'none',
+});
+
+export const DEFAULT_RELIGHT: RelightJson = Object.freeze({
+  enabled: false,
+  mode: 'unsupported',
+  hasSphericalHarmonics: true,
+  shDegree: 2,
+});
+
 export interface CalibrationJson {
   scaleFactor: number | null;
   source: CalibrationSource;
@@ -63,6 +99,8 @@ export interface SceneDocument {
   nodes: SceneNodeJson[];
   calibration: CalibrationJson;
   overlays: OverlayJson[];
+  temporal: TemporalJson;
+  relight: RelightJson;
 }
 
 export const DEFAULT_CALIBRATION: CalibrationJson = Object.freeze({
@@ -84,5 +122,7 @@ export function createEmptySceneDocument(name = 'Cena sem título'): SceneDocume
     nodes: [],
     calibration: { ...DEFAULT_CALIBRATION },
     overlays: [],
+    temporal: { ...DEFAULT_TEMPORAL },
+    relight: { ...DEFAULT_RELIGHT },
   };
 }

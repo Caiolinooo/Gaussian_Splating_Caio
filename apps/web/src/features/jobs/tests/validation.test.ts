@@ -20,6 +20,18 @@ describe('classifyFiles', () => {
     expect(result.videos).toHaveLength(1);
   });
 
+  it('reconhece um GIF', () => {
+    const result = classifyFiles([file('loop.gif', 2048, 'image/gif')]);
+    expect(result.kind).toBe('gif');
+    expect(result.gifs).toHaveLength(1);
+  });
+
+  it('reconhece um PLY', () => {
+    const result = classifyFiles([file('scan.ply', 4096)]);
+    expect(result.kind).toBe('ply');
+    expect(result.plys).toHaveLength(1);
+  });
+
   it('reconhece um conjunto de imagens', () => {
     const result = classifyFiles([file('a.jpg'), file('b.png'), file('c.heic')]);
     expect(result.kind).toBe('images');
@@ -40,7 +52,7 @@ describe('validateFilesSync', () => {
   it('pede arquivo quando não há seleção', () => {
     const result = validateFilesSync([]);
     expect(result.ok).toBe(false);
-    expect(result.errors[0]).toMatch(/vídeo ou um conjunto/i);
+    expect(result.errors[0]).toMatch(/vídeo.*GIF.*PLY|conjunto de imagens/i);
   });
 
   it('rejeita vídeo acima do limite', () => {
@@ -54,6 +66,11 @@ describe('validateFilesSync', () => {
     const result = validateFilesSync(files);
     expect(result.ok).toBe(false);
     expect(result.errors[0]).toMatch(/pelo menos/);
+  });
+
+  it('aceita um gif e um ply', () => {
+    expect(validateFilesSync([file('loop.gif', 2048, 'image/gif')]).kind).toBe('gif');
+    expect(validateFilesSync([file('scan.ply', 4096)]).ok).toBe(true);
   });
 
   it('aceita 20 jpg pequenos', () => {

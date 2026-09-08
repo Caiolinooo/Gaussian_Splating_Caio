@@ -5,14 +5,20 @@ import { cloneTRS, createTRS, type TRS } from '../math/trs';
 import { assertNever } from '../assertNever';
 import {
   DEFAULT_CALIBRATION,
+  DEFAULT_RELIGHT,
+  DEFAULT_TEMPORAL,
   SCENE_SCHEMA_VERSION,
   type BackgroundSplatJson,
   type CalibrationJson,
   type CalibrationSource,
   type OverlayJson,
+  type RelightJson,
+  type RelightMode,
   type SceneDocument,
   type SceneNodeJson,
   type SceneNodeKind,
+  type TemporalJson,
+  type TemporalSourceKind,
 } from './sceneSchema';
 
 export class SceneSchemaError extends Error {
@@ -51,6 +57,8 @@ export function parseSceneDocument(input: unknown): SceneDocument {
     nodes: parseNodes(raw.nodes),
     calibration: parseCalibration(raw.calibration),
     overlays: parseOverlays(raw.overlays),
+    temporal: parseTemporal(raw.temporal),
+    relight: parseRelight(raw.relight),
   });
 }
 
@@ -75,6 +83,8 @@ function normalizeDocument(doc: SceneDocument): SceneDocument {
     nodes: doc.nodes.map(cloneNode),
     calibration: cloneCalibration(doc.calibration),
     overlays: doc.overlays.map(cloneOverlay),
+    temporal: cloneTemporal(doc.temporal ?? DEFAULT_TEMPORAL),
+    relight: cloneRelight(doc.relight ?? DEFAULT_RELIGHT),
   };
 }
 
@@ -124,6 +134,26 @@ function cloneCalibration(cal: CalibrationJson): CalibrationJson {
 
 function cloneOverlay(overlay: OverlayJson): OverlayJson {
   return { ...overlay };
+}
+
+function cloneTemporal(temporal: TemporalJson): TemporalJson {
+  return {
+    enabled: temporal.enabled,
+    frameCount: temporal.frameCount,
+    durationS: temporal.durationS,
+    fps: temporal.fps,
+    currentTime: temporal.currentTime,
+    sourceKind: temporal.sourceKind,
+  };
+}
+
+function cloneRelight(relight: RelightJson): RelightJson {
+  return {
+    enabled: relight.enabled,
+    mode: relight.mode,
+    hasSphericalHarmonics: relight.hasSphericalHarmonics,
+    shDegree: relight.shDegree,
+  };
 }
 
 function parseBackground(value: unknown): BackgroundSplatJson | null {
@@ -262,6 +292,74 @@ function parseCalibration(value: unknown): CalibrationJson {
     warnings: parseWarnings(value.warnings),
     reference: value.reference == null ? undefined : parseReference(value.reference),
   };
+}
+
+function parseTemporal(value: unknown): TemporalJson {
+  if (value == null) {
+    return { ...DEFAULT_TEMPORAL };
+  }
+  if (!isRecord(value)) {
+    throw new SceneSchemaError('temporal', 'temporal deve ser objeto.');
+  }
+  const sourceKind = parseTemporalSourceKind(value.sourceKind);
+  const frameCount =
+    value.frameCount == null ? 0 : readInt(value.frameCount, 'temporal.frameCount');
+  return {
+    enabled: value.enabled === true || (sourceKind !== 'none' && frameCount > 1),
+    frameCount,
+    durationS: value.durationS == null ? null : readNumber(value.durationS, 'temporal.durationS'),
+    fps: value.fps == null ? null : readNumber(value.fps, 'temporal.fps'),
+    currentTime:
+      value.currentTime == null ? 0 : readNumber(value.currentTime, 'temporal.currentTime'),
+    sourceKind,
+  };
+}
+
+function parseTemporalSourceKind(value: unknown): TemporalSourceKind {
+  switch (value) {
+    case 'none':
+    case 'gif':
+    case 'video':
+    case 'sequence':
+      return value;
+    case undefined:
+    case null:
+      return 'none';
+    default:
+      throw new SceneSchemaError(
+        'temporal-source',
+        `temporal.sourceKind inválido: ${String(value)}`,
+      );
+  }
+}
+
+function parseRelight(value: unknown): RelightJson {
+  if (value == null) {
+    return { ...DEFAULT_RELIGHT };
+  }
+  if (!isRecord(value)) {
+    throw new SceneSchemaError('relight', 'relight deve ser objeto.');
+  }
+  return {
+    enabled: value.enabled === true,
+    mode: parseRelightMode(value.mode),
+    hasSphericalHarmonics: value.hasSphericalHarmonics !== false,
+    shDegree: value.shDegree == null ? 2 : readInt(value.shDegree, 'relight.shDegree'),
+  };
+}
+
+function parseRelightMode(value: unknown): RelightMode {
+  switch (value) {
+    case 'baked-sh':
+    case 'preview':
+    case 'unsupported':
+      return value;
+    case undefined:
+    case null:
+      return 'unsupported';
+    default:
+      throw new SceneSchemaError('relight-mode', `relight.mode inválido: ${String(value)}`);
+  }
 }
 
 function parseCalibrationSource(value: unknown): CalibrationSource {

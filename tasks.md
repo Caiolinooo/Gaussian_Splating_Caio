@@ -1,7 +1,8 @@
 # Tasks — Plataforma de Gaussian Splatting a partir de Vídeo
 
 > Plano de ação de alto nível. Documento vivo: atualizar a cada fase concluída.
-> Última revisão: 2026-09-08 (9ª revisão — **deploy no L4 + login local**: merge do hotfix SfM em `main` e deploy em `vm.groupabz.com:2222`. Causa raiz real da falha do job `1fbb35e2` confirmada via `colmap.log`: COLMAP 4.3.0.dev0 removeu `SiftExtraction.use_gpu`/`SiftMatching.use_gpu` (agora `FeatureExtraction.use_gpu`/`FeatureMatching.use_gpu`) — pipeline passou a sondar `colmap <cmd> -h` e falar o dialeto do binário instalado. SfM rodou em GPU no servidor; o vídeo do job registrou só 3/192 imagens (parede branca lisa + pouca paralaxe — material, não infra). **Auth**: `LOCAL_AUTH_USER`/`LOCAL_AUTH_PASSWORD` + `POST /auth/login` (JWT HS256) + `GET /auth/local`; UI com login local pré-preenchido; base da API same-origin quando servida via `SERVE_WEB_DIR`; dados migrados de `dev-user` para `caio`; `DEV_AUTH_BYPASS=0` em produção no L4).
+> Última revisão: 2026-09-08 (10ª revisão — **SceneIO unificado**: uma superfície `ingest_scene`/`export_scene` para PLY, GIF, vídeo e imagens. PLY pula SfM/treino; GIF → frames (ffmpeg); export grava `scene.json` + `scene.zip` além de `.ply`/`.ksplat`. Schema de cena ganha `temporal` + `relight` (contrato 4DGS/relight, sem fingir GaussianCrowds). Viewer: badge WebGPU, scrubber, download de cena. Ver `docs/unified-scene-io.md`. COLMAP/SfM da 9ª revisão permanece intacto).
+> Revisão anterior: 2026-09-08 (9ª revisão — **deploy no L4 + login local**: merge do hotfix SfM em `main` e deploy em `vm.groupabz.com:2222`. Causa raiz real da falha do job `1fbb35e2` confirmada via `colmap.log`: COLMAP 4.3.0.dev0 removeu `SiftExtraction.use_gpu`/`SiftMatching.use_gpu` (agora `FeatureExtraction.use_gpu`/`FeatureMatching.use_gpu`) — pipeline passou a sondar `colmap <cmd> -h` e falar o dialeto do binário instalado. SfM rodou em GPU no servidor; o vídeo do job registrou só 3/192 imagens (parede branca lisa + pouca paralaxe — material, não infra). **Auth**: `LOCAL_AUTH_USER`/`LOCAL_AUTH_PASSWORD` + `POST /auth/login` (JWT HS256) + `GET /auth/local`; UI com login local pré-preenchido; base da API same-origin quando servida via `SERVE_WEB_DIR`; dados migrados de `dev-user` para `caio`; `DEV_AUTH_BYPASS=0` em produção no L4).
 > Revisão anterior: 2026-09-08 (7ª revisão — **0.2.0 no servidor L4**: Provisioner real (ffmpeg/PyTorch/gsplat); COLMAP só localizado, nunca compilado pelo app; defaults de VRAM/RAM; export `.ply` se faltar splat-transform. **Ainda não marcado**: treino 3DGS longo verificado no browser, E2E Playwright no CI, sidecar Tauri).
 > Revisão anterior: 2026-09-08 (5ª revisão — **auditoria UI/workflow local, sem GPU**: typecheck/lint/Vitest/pytest verdes; API+web subidos com bypass de auth; fluxo `/` `/setup` `/login` `/jobs` `/upload` `/jobs/:id` `/viewer` exercitado no Edge. Job sintético de 20 imagens falhou no SfM sem disparar treino).
 
@@ -11,7 +12,7 @@
 
 Aplicação end-to-end, **100% zero-CLI**, que transforma **vídeos ou conjuntos de imagens** em **cenas 3D Gaussian Splatting interativas, editáveis e calibradas em unidades reais**:
 
-1. **Geração automatizada**: vídeo (ou upload múltiplo de imagens) → extração de frames → SfM (COLMAP) → treino 3DGS → splat (.ply master + .ksplat web). Todo o workflow — incluindo **preparação do ambiente, download e instalação de dependências (ffmpeg, COLMAP, Python/CUDA, gsplat)** — é executado e acompanhado por **UI própria**: o usuário final **nunca executa comandos manualmente**. Evolução futura para cenas dinâmicas/movimentos complexos (inspirado em MoE-GS — mixture-of-experts para dynamic Gaussian splatting, IEEE TPAMI Set/2026).
+1. **Geração automatizada**: **uma** ingestão (`SceneIO`) aceita vídeo, conjunto de imagens, GIF (ffmpeg → frames) ou PLY já splat (pula SfM/treino) → SfM (COLMAP) quando couber → treino 3DGS → export `.ply` + `.ksplat` + **JSON de cena** + **zip**. Todo o workflow — incluindo **preparação do ambiente, download e instalação de dependências (ffmpeg, COLMAP, Python/CUDA, gsplat)** — é executado e acompanhado por **UI própria**: o usuário final **nunca executa comandos manualmente**. Evolução futura para cenas dinâmicas/movimentos complexos (MoE-GS / 4DGS / relight — contratos no schema, sem pipeline paralelo).
 2. **Entrada mínima de dados**: o usuário fornece apenas (a) vídeo **ou** conjunto de imagens e (b) **sua altura**. A altura alimenta a **auto-calibração de escala** (detecção de pessoa/pose nos frames estima a altura na cena e cruza com a altura real informada).
 3. **Visualização**: viewer web interativo (orbit, pan, zoom, seleção por clique).
 4. **Edição**: inserção de objetos 3D (GLB/glTF e/ou splats adicionais) com manipulação via gizmos (translação, rotação, escala) — **sempre já em unidades reais calibradas**.
@@ -116,13 +117,13 @@ Decisões estruturais:
 **Objetivo**: dado um vídeo **ou** um conjunto de imagens (+ altura do usuário), produzir splat `.ply` (master) + `.ksplat` (web) de qualidade, com acompanhamento em tempo real e auto-calibração candidata.
 
 - [x] **Contas e multiusuário desde já** (decisão 2026-09-04): **Supabase Auth** no frontend (`@supabase/supabase-js`, telas login/signup/reset) + JWT HS256 na API com isolamento por usuário (testes API). OAuth/RLS hospedado e sessão real em produção **não** verificados aqui (bypass de dev documentado).
-- [x] Upload via API: **vídeo (multipart) OU upload múltiplo de imagens** (jpg/png/heic); se imagens, **pular a etapa ffmpeg**; validações (formato, qtd. mínima) e storage por usuário/job — testes API + ingest. Duração/resolução real de ffmpeg **não** exercitada (binário pesado).
+- [x] Upload via API: **vídeo (multipart) OU upload múltiplo de imagens** (jpg/png/heic) **ou GIF ou PLY**; se imagens, **pular a etapa ffmpeg**; PLY pula SfM/treino; validações (formato, qtd. mínima) e storage por usuário/job — testes API + SceneIO. Duração/resolução real de ffmpeg **não** exercitada (binário pesado).
 - [x] **Campo de altura do usuário** no fluxo de upload (obrigatório no MVP; persistir com o job) — testes de validação web + spec do job.
 - [x] Extração de frames com **ffmpeg** (somente para vídeo): taxa adaptativa, blur/dedup, normalização — **código + testes de ingest** (ffmpeg real não instalado nesta verificação).
 - [x] SfM com **COLMAP**: JobMachine chama o binário real (PATH ou `~/colmap/build/...`); `COLMAP_FAILED` se o binário ainda não existir. Validação visual de um dataset grande **pendente**.
 - [x] Treino com **gsplat**: JobMachine chama `simple_trainer.py` com defaults L4 (7000 steps, `data_factor=4`, SH 2). Treino longo (30k / PSNR) **não** verificado neste turno.
 - [x] **Etapa de auto-calibração** (pós-export/meshproxy): serviço + `PipelineAutocal` grava `calibration.json`; fallback se pose/depth faltar **nunca derruba o job** (testes autocal + adapter). Backends MediaPipe/MMPose e profundidade COLMAP **não** exercitados (`ColmapDepthProvider` é stub).
-- [x] Export: orquestração **`.ply` master** + **`.ksplat` web** + thumbnail — testes de comandos/runner. `splat-transform` / GPU real pendentes.
+- [x] Export: orquestração **`.ply` master** + **`.ksplat` web** + thumbnail + **`scene.json` + `scene.zip`** — testes SceneIO/runner. `splat-transform` / GPU real pendentes.
 - [x] Orquestração de jobs **idempotente e retomável**: máquina de estados persistida (`queued→extracting→sfm→training→exporting→meshproxy→autocal→done/error`), resume, retry, cancel — testes da job machine. Fila Redis/Celery e **gate do Provisioner no worker** ainda não.
 - [x] **UI do pipeline** + canal WS: etapas/%, catálogo de erros, cliente `?token=` — testes unitários web + testes WS da API. Acompanhamento visual E2E / ETA ao vivo **não** verificado no browser.
 - [x] Telemetria de qualidade: métricas de treino/ingest/autocal persistidas no registro do job — testes de métricas. PSNR real de GPU pendente.
@@ -138,7 +139,7 @@ Decisões estruturais:
 **Objetivo**: viewer web fluido do splat reconstruído, com navegação e seleção, sobre a abstração de renderer decidida.
 
 - [x] **Interface `SplatRenderer` própria** (decisão 2026-09-04): contrato + adapters Spark / @mkkellogg — testes de `detectBackend`. **Renderer não executado** nesta máquina (WebGPU/WebGL).
-- [x] Detecção de capability (WebGPU? WebGL2?) no código do backend — testes unitários. Badge visual no HUD **não** verificado no browser.
+- [x] Detecção de capability (WebGPU? WebGL2?) no código do backend — testes unitários. Badge "Spark · WebGPU" no HUD quando o adapter existe (verificação visual no browser **ainda** pendente).
 - [ ] Carregamento de `.ksplat` (web) / `.ply` (master) com progress bar — UI existe; **não** verificado com splat real.
 - [ ] Navegação: `OrbitControls` + presets de câmera — código no viewer; **não** verificado rodando.
 - [x] Seleção por clique: raycast de mesh + picking por centros de gaussiana — testes unitários de picking.
@@ -207,6 +208,7 @@ Decisões estruturais:
 **Objetivo**: evoluir de cenas estáticas para dinâmicas (vídeo com objetos/pessoas em movimento), de forma incremental. **Decisão 2026-09-04: monocular primeiro, com arquitetura preparada para multi-câmera** (modelo de dados de captura, orquestrador e formatos já admitem N streams sincronizados).
 
 - [ ] Marco 0 (pesquisa): levantamento do estado da arte em dynamic 3DGS — **MoE-GS** (mixture-of-experts para dynamic Gaussian splatting, IEEE TPAMI Set/2026), 4DGS, Deformable-3DGS, SC-GS; comparar código aberto, licenças e requisitos de GPU.
+- [x] Marco 0 (parcial): contratos `temporal`/`relight` no JSON de cena + scrubber no HUD + ingestão GIF como sequência de frames. **Não** há treino 4DGS/relightable (GaussianCrowds permanece pesquisa).
 - [ ] Marco 1: suporte a "dinâmico leve" — vídeo estático reconstruído + objetos GLB animados inseridos na edição (nada de treino novo).
 - [ ] Marco 2: pipeline 4D **monocular**: timestamps por frame, treino deformable/4DGS, reprodução temporal no viewer (scrub de tempo).
 - [ ] Marco 3: movimentos complexos via abordagem MoE (roteadores/experts por região ou por trajetória), conforme maturidade do código aberto do MoE-GS; validar custo de treino vs. ganho visual. Extensão **multi-câmera** entra aqui, sobre a arquitetura já preparada.

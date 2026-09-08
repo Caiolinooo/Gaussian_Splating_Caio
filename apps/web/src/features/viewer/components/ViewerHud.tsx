@@ -12,8 +12,10 @@ export function ViewerHud() {
   const backend = useViewerStore((state) => state.backend);
   const quality = useViewerStore((state) => state.quality);
   const memoryMb = useViewerStore((state) => state.memoryMb);
+  const temporal = useViewerStore((state) => state.temporal);
+  const relight = useViewerStore((state) => state.relight);
 
-  const badge = backendBadge(backend?.backend ?? 'none');
+  const badge = backendBadge(backend?.backend ?? 'none', backend?.webgpu === true);
 
   return (
     <div className="gs-hud" aria-label="Informações do viewer">
@@ -30,18 +32,48 @@ export function ViewerHud() {
         SH {quality.shDegree}
       </button>
       {memoryMb !== null && <span>{memoryMb.toFixed(0)} MB</span>}
+      {temporal.enabled && (
+        <label className="gs-scrubber">
+          Tempo
+          <input
+            type="range"
+            min={0}
+            max={1000}
+            value={Math.round(temporal.currentTime * 1000)}
+            aria-label="Scrubber temporal"
+            onChange={(event) => controller?.setPlaybackTime(Number(event.target.value) / 1000)}
+          />
+          <span>
+            {temporal.frameCount > 0
+              ? `${Math.round(temporal.currentTime * Math.max(temporal.frameCount - 1, 0)) + 1}/${temporal.frameCount}`
+              : `${Math.round(temporal.currentTime * 100)}%`}
+          </span>
+        </label>
+      )}
+      <label className="gs-relight" title="Contrato futuro — treino 4DGS/relight ainda não existe">
+        <input
+          type="checkbox"
+          checked={relight.enabled}
+          disabled={relight.mode === 'unsupported'}
+          onChange={(event) => controller?.setRelightPreview(event.target.checked)}
+        />
+        Relight ({relight.mode})
+      </label>
       <CalibrationIndicator />
     </div>
   );
 }
 
-function backendBadge(kind: DetectedBackendKind): {
+function backendBadge(
+  kind: DetectedBackendKind,
+  webgpu: boolean,
+): {
   label: string;
   tone: 'spark' | 'webgl' | 'none';
 } {
   switch (kind) {
     case 'spark':
-      return { label: 'Spark', tone: 'spark' };
+      return { label: webgpu ? 'Spark · WebGPU' : 'Spark', tone: 'spark' };
     case 'mkkellogg':
       return { label: 'WebGL2', tone: 'webgl' };
     case 'none':

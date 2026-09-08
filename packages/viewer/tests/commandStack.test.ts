@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { applyOp, invertOp, type EditorOp, type SceneState } from '../src/editing/commands';
 import { CommandStack } from '../src/editing/CommandStack';
-import { DEFAULT_CALIBRATION } from '../src/editing/sceneSchema';
+import { DEFAULT_CALIBRATION, DEFAULT_RELIGHT, DEFAULT_TEMPORAL } from '../src/editing/sceneSchema';
 import { createTRS } from '../src/math/trs';
 
 function emptyState(): SceneState {
@@ -13,6 +13,8 @@ function emptyState(): SceneState {
     nodes: [],
     calibration: { ...DEFAULT_CALIBRATION },
     overlays: [],
+    temporal: { ...DEFAULT_TEMPORAL },
+    relight: { ...DEFAULT_RELIGHT },
   };
 }
 

@@ -56,4 +56,6 @@ class SceneDocument(BaseModel):
     nodes: list[SceneNodeSchema] = Field(default_factory=list)
     calibration: CalibrationSchema = Field(default_factory=CalibrationSchema)
     overlays: list[OverlaySchema] = Field(default_factory=list)
+    temporal: dict[str, Any] | None = None
+    relight: dict[str, Any] | None = None
     updated_at: str | None = None

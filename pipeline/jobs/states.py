@@ -30,6 +30,8 @@ class StageStatus(StrEnum):
 class SourceKind(StrEnum):
     VIDEO = "video"
     IMAGES = "images"
+    GIF = "gif"
+    PLY = "ply"
 
 
 STAGE_ORDER: tuple[str, ...] = (

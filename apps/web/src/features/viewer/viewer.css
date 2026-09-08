@@ -162,3 +162,14 @@
 .gs-cal-warn {
   color: var(--warning);
 }
+
+.gs-scrubber,
+.gs-relight {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gs-scrubber input[type='range'] {
+  width: 8rem;
+}
