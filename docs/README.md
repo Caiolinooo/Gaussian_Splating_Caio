@@ -7,3 +7,5 @@ Documentação viva do projeto. A **fonte de verdade de alto nível** (visão, a
 - Stack e justificativas: `tasks.md` §6
 - Decisões e riscos: `tasks.md` §7
 - SceneIO unificado (ingest/export): [`unified-scene-io.md`](unified-scene-io.md)
+- Inspiração Video2 4DGS (timesteps; Comfy só interchange): [`inspiration-video24dgs.md`](inspiration-video24dgs.md)
+- Inspiração paredes sem LiDAR + depth no forward pass: [`inspiration-walls-depth.md`](inspiration-walls-depth.md)

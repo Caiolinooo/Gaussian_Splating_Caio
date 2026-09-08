@@ -9,6 +9,7 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Contrato das 4 inspirações** no SceneIO (docs): SuperSplat 3, GaussianCrowds, Video2 4DGS e paredes-sem-LiDAR + depth no forward pass — uma tabela em `docs/unified-scene-io.md`. Briefings `docs/inspiration-video24dgs.md` e `docs/inspiration-walls-depth.md`. `temporal` já cobre timesteps de vídeo; `.npz`/Comfy e `dataset/depths/` ficam reservados. `ColmapDepthProvider` documentado como stub.
 - **SceneIO unificado**: um orquestrador (`detect_source_kind` → `ingest_scene` → `export_scene`) para PLY, GIF, vídeo e imagens — sem pipelines paralelos. Desenho em `docs/unified-scene-io.md`.
 - **Ingestão de GIF e PLY**: GIF vira frames via ffmpeg (mesmo caminho de vídeo; mínimo de frames relaxado). PLY entra como splat pronto — SfM, treino e autocal são pulados.
 - **Exportação de cena interoperável**: além de `.ply` / `.ksplat`, o job grava `scene.json` (schema `@gs/viewer`, com `temporal` e `relight`) e `scene.zip`. Novos artefatos `GET /jobs/{id}/artifacts/scene` e `/package`.
