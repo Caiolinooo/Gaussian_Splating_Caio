@@ -2,7 +2,9 @@
 
 Documento curto para o orquestrador único do Gaussian Splatting Studio. **Não** é spec de implementação nem segundo pipeline.
 
-`docs/unified-scene-io.md` **ainda não existe**. A linguagem abaixo alinha-se a [`tasks.md`](../tasks.md) (orquestrador único, `source_kind=video`, `SceneDocument`, `SplatRenderer` / Spark WebGPU, Fase 6) e ao contrato já planejado `SceneIO` / `ingestScene` / `exportScene` (SuperSplat 3 WebGPU + GaussianCrowds relight/4D). Um `unified-scene-io.md` futuro **não deve contradizer** este briefing: 4D = frames temporais + schema de timesteps no mesmo contrato; ComfyUI é *fonte* opcional, nunca runtime embutido.
+Alinha-se a [`unified-scene-io.md`](unified-scene-io.md) e ao código em `pipeline/sceneio/` (`detect_source_kind` → `ingest_scene` → JobMachine única → `export_scene`). Os nomes de produto `SceneIO` / `ingestScene` / `exportScene` são essa mesma superfície. **Não contradizer** esse contrato: uma origem, um documento (`temporal` + `relight`), ComfyUI só como *fonte* opcional.
+
+Irmão: [`inspiration-walls-depth.md`](inspiration-walls-depth.md) (depth/paredes no mesmo documento; sem `source_kind` novo).
 
 ---
 
@@ -14,32 +16,34 @@ Não há paper no arXiv com o título literal «Video2-4DGS» / `Video24DGS`. O 
 
 | Papel | Link | Licença |
 |---|---|---|
-| Paper / repo oficiais **4D-GS** (canônicos + campo de deformação + timestamp) | [Wu et al., CVPR 2024](https://arxiv.org/abs/2310.08528) · [página](https://guanjunwu.github.io/4dgs/) · [hustvl/4DGaussians](https://github.com/hustvl/4DGaussians) | Apache-2.0 |
+| Paper / repo oficiais **4D-GS** (canônicos + deformação + timestamp) | [Wu et al., CVPR 2024](https://arxiv.org/abs/2310.08528) · [página](https://guanjunwu.github.io/4dgs/) · [hustvl/4DGaussians](https://github.com/hustvl/4DGaussians) | Apache-2.0 |
 | Variante 4D nativa (primitivos 4D) | [Yang et al., ICLR 2024](https://arxiv.org/abs/2310.10642) · [fudan-zvg/4d-gaussian-splatting](https://github.com/fudan-zvg/4d-gaussian-splatting) | MIT |
 | Workflow ComfyUI «Video → 4D World» (links típicos do post) | [Alexankharin/camera-comfyUI](https://github.com/Alexankharin/camera-comfyUI) · [video_to_4d_world.json](https://github.com/Alexankharin/camera-comfyUI/blob/main/workflows/video_to_4d_world.json) · registry `camera-comfyui` (publisher `alexk`) | MIT (submódulo SHARP: licença Apple, não OSI) |
 | Pose + profundidade no workflow | [facebookresearch/vggt](https://github.com/facebookresearch/vggt) (VGGT, CVPR 2025) | licença Meta (não Apache) |
 | Splat feed-forward por keyframe | [apple/ml-sharp](https://github.com/apple/ml-sharp) (SHARP) | licença Apple (não redistribuir como nosso código) |
-| Export Comfy (mesmo contrato mental que `exportScene`) | `SaveSplats4D` → `.npz` (`canonical`, `trajectories`, `times`, `rotations?`, `static?`) e, opcional, **um `.ply` 3DGS por timestep** | — |
+| Export Comfy (interchange, não mestre nosso) | `SaveSplats4D` → `.npz` (`canonical`, `trajectories`, `times`, `rotations?`, `static?`) e, opcional, **um `.ply` 3DGS por timestep** (`*_t0000.ply`) | — |
 
-Irmãos do contrato `SceneIO` (não são Video2 4DGS; citados só para não divergir):
+Irmãos do mesmo `SceneIO` (já no contrato; **não** clonamos os produtos):
 
-- **SuperSplat 3 WebGPU** — [playcanvas/supersplat v3.0.0](https://github.com/playcanvas/supersplat/releases/tag/v3.0.0) (2026-09-08): renderer compute WebGPU, export streamado PLY / compressed PLY / SOG / SPZ / `.ssproj`. Em [`tasks.md` §6](../tasks.md) SuperSplat **não** é a base do editor; entra em `exportScene` como *dialeto de artefato*, atrás de `SplatRenderer`.
-- **GaussianCrowds (relight/4D)** — faixa planejada no mesmo `SceneDocument` (atributos de relight + timesteps). Sem repo homônimo público no levantamento; o analog acadêmico mais próximo é [CrowdSplat](https://arxiv.org/abs/2501.17792). Não abrir pipeline paralelo.
+- **SuperSplat 3 WebGPU** — [v3.0.0](https://github.com/playcanvas/supersplat/releases/tag/v3.0.0) (2026-09-08). [`unified-scene-io.md`](unified-scene-io.md): adotamos *um* viewer (Spark se WebGPU, MkKellogg se WebGL2) e export baixável (PLY + JSON). Streaming SOG/LOD e editor SuperSplat ficam contrato futuro. SuperSplat **não** é a base do editor (`tasks.md` §6).
+- **GaussianCrowds (4DGS relightable)** — no contrato: schema `temporal` + `relight`, scrubber, flags SH (`relight.mode = unsupported` até haver backend). Treino 4D / multi-luz / LOD de multidões **não** entram agora.
 
 ---
 
 ## 1. O que o projeto faz
 
-Video2 4DGS (no sentido do post e do workflow ComfyUI) transforma **vídeo monocular** numa cena Gaussiana **navegável no tempo**: estima poses e profundidade por frame (VGGT), separa fundo estático de pixels dinâmicos, funde keyframes num splat de mundo (SHARP + polish) e amarra o movimento a trajetórias 3D (CoTracker3 → `BuildSplats4D`). O resultado não é um splat estático por frame isolado: é um contentor 4D — splats canônicos + trajetórias `[T, N, 3]` + `times` normalizados `0..1` — que se avalia num instante (`at_time`) e se exporta como `.npz` e/ou **sequência de `.ply` temporais**. O paper 4D-GS (Wu et al.) formaliza a mesma ideia no treino clássico: Gaussianas canônicas + deformação condicionada a **timestamps**, em vez de um 3DGS independente por frame.
+Video2 4DGS (post + workflow ComfyUI) transforma **vídeo monocular** numa cena Gaussiana **navegável no tempo**: estima poses e profundidade por frame (VGGT), separa fundo estático de pixels dinâmicos, funde keyframes num splat de mundo (SHARP + polish) e amarra o movimento a trajetórias 3D (CoTracker3 → `BuildSplats4D`). O resultado não é um 3DGS isolado por frame: é um contentor 4D — splats canônicos + trajetórias `[T, N, 3]` + `times` normalizados `0..1` — avaliado em `at_time` e exportado como `.npz` e/ou **sequência de `.ply` temporais**. O paper 4D-GS (Wu et al.) formaliza a mesma ideia no treino clássico: Gaussianas canônicas + deformação condicionada a **timestamps**, em vez de um 3DGS independente por frame.
 
 ---
 
 ## 2. Capacidades relevantes para NÓS
 
-- **Ingest de vídeo temporal** — já temos `SourceKind.VIDEO` / `source_kind=video`, `ingest_video` (ffmpeg + filtro) e `manifest.json` com `fps` / `duration_s`. Falta só **timestamp por frame mantido** (não só `frame_000001.jpg` renumerado).
-- **Timesteps 4D** — o schema útil é o do `GaussianSplats4D`: `times[]` monotônico, trajetórias por primitiva, fundo estático opcional. Isso é **dado de cena**, não grafo Comfy.
-- **Export** — `.ply` por timestep (já falamos a língua `.ply` master) e, no futuro, o mesmo `exportScene` que SuperSplat 3 (SOG/SPZ/stream). `.npz` GSPLAT4D é *adapter* de import, não formato-mestre nosso.
-- **ComfyUI como fonte opcional** — um utilizador (ou job externo) pode produzir `.npz` / pasta de `.ply` `*_t0000.ply` e entregá-los a `ingestScene`. **Não** instalamos, orquestramos nem embutimos ComfyUI, SHARP, VGGT ou o pack `camera-comfyUI`.
+Já no contrato `SceneIO` / `ingest_scene`:
+
+- **Ingest de vídeo temporal** — `source_kind=video` (e GIF pelo mesmo ffmpeg). `ingest_scene` já grava `ingest.json` com bloco `temporal` (`enabled`, `frameCount`, `durationS`, `fps`, `currentTime`, `sourceKind`).
+- **Timesteps 4D** — 4D = essa trilha temporal + (futuro) lista de frames/artefatos, **não** pipeline novo. Reservado em `detect.py`: `.plyseq` / `.4dgs` / pasta `frame_*.ply` como *hint* de sequência; hoje um job rejeita vários `.ply` («sequências 4D ainda não são treinadas»).
+- **Export** — `export_scene`: `master.ply` + `scene.ksplat` + `scene.json` (`temporal` + `relight`) + `scene.zip`. SuperSplat 3 entra como *dialeto de ficheiro*, não como segundo exporter.
+- **ComfyUI como fonte opcional** — um `.npz` GSPLAT4D ou pasta `*_tN.ply` é interchange para `ingest_scene` (futuro `SEQUENCE`), nunca runtime. **Não** instalar ComfyUI, SHARP, VGGT nem `camera-comfyUI` no Provisioner.
 
 ---
 
@@ -47,55 +51,56 @@ Video2 4DGS (no sentido do post e do workflow ComfyUI) transforma **vídeo monoc
 
 - UI Comfy (canvas, templates, Manager, registry).
 - Grafo de nodes (`VideoPoseEstimator` → `MotionMaskFromDepth` → `VideoToFusedSplats` → `EstimateTracks` → `BuildSplats4D` → `RenderSplats4DVideo`).
-- Segundo pipeline / segunda job machine («modo 4D» paralelo a `extracting→sfm→training→exporting→…`).
-- SuperSplat como engine/editor (já descartado em `tasks.md`); só dialetos de ficheiro e padrões WebGPU via `SplatRenderer`.
+- Segundo pipeline / segunda JobMachine («modo 4D» ao lado de `extracting→sfm→training→exporting→…`).
+- SuperSplat como engine/editor; GaussianCrowds como app UE. Só schema + interchange.
 - Vendor de SHARP / VGGT (licenças não-permissivas) nem o runtime Comfy.
-- Treino 4D-GS (HexPlane/MLP) como etapa obrigatória agora — isso é Fase 6 Marco 2, no *mesmo* orquestrador.
+- Novo `source_kind` (`comfy`, `4dgs`, `video24dgs`). Vídeo continua `video`; sequência importada, quando existir, reusa o detector já reservado — sem treino 4D agora.
+- Treino 4D-GS (HexPlane/MLP) como etapa obrigatória — Fase 6 Marco 2, na *mesma* máquina.
 
 ---
 
 ## 4. Encaixe no contrato único `SceneIO`
 
-Uma fachada, três verbos, um documento:
+Uma superfície, como em [`unified-scene-io.md`](unified-scene-io.md):
 
 ```
-ingestScene(source) → SceneDocument
-exportScene(scene)  → artefatos (.ply master + .ksplat hoje; SOG/SPZ/stream depois)
+detect_source_kind(files) → ingest_scene(...) → JobMachine → export_scene(...)
 ```
 
-| Já existe | Como 4D entra *sem* pipeline novo |
+| Contrato atual | Como Video2 4DGS entra *sem* pipeline novo |
 |---|---|
-| `source_kind=video` \| `images` | Vídeo continua `video`. 4D **não** é novo `source_kind`. |
-| `pipeline/ingest/video.py` + `manifest.json` | `ingestScene` é a fachada desta etapa: frames + **`timestamps_s`** (e `t_norm` 0..1). |
-| Job machine atual | Inalterada. Timesteps viajam em `extra` / manifest / `SceneDocument`. |
-| `SceneDocument` v1 (`backgroundSplat`, nodes, calibration, overlays) | Extensão **aditiva**: `timesteps?: { t, uri, format }[]` no splat de fundo (ou node `splat`). Ausente ⇒ cena estática (hoje). |
-| `run_export` (`.ply` + `.ksplat`) | `exportScene` de um timestep (t=0 ou t pedido) ou, no futuro, pasta `tXXXX.ply` — o mesmo exporter. |
-| `SplatRenderer` + Spark WebGPU | Viewer lê o schema; scrub é Fase 6. SuperSplat 3 = I/O/WebGPU, não segundo viewer. |
-| GaussianCrowds relight/4D | Mesmos `timesteps` + campos de relight no documento; **não** segundo ingest. |
-| Import Comfy opcional | `ingestScene({ kind: "video4d-artifact", files })` mapeia `.npz`/`*_tN.ply` → `timesteps[]`. Sem worker Comfy. |
+| `detect_source_kind` | Vídeo = `video`. Artefato Comfy (`.npz` / `*_tN.ply`) **não** é kind novo hoje; no futuro cai no hint de sequência já reservado (`.plyseq` / `.4dgs` / vários ply), ainda **um** ingest. |
+| `ingest_scene` + `ingest.json` | Fachada do ffmpeg/imagens/PLY. 4D = preencher `temporal` (já) e, depois, timestamps por frame kept. |
+| JobMachine única | Inalterada. PLY direto já faz skip de SfM/treino; sequência 4D importada fará o mesmo (`skips_reconstruction`). |
+| `SceneDocument` + `temporal` + `relight` | `temporal.enabled` em vídeo/GIF; `relight.mode = unsupported` (faixa GaussianCrowds). Sem capítulo «comfy». |
+| `export_scene` | Um timestep (t = `currentTime` ou 0) → `master.ply` / `scene.ksplat` / `scene.json` / `scene.zip`. Pasta `tXXXX.ply` é o mesmo exporter, N vezes, no futuro. |
+| `SplatRenderer` | Spark WebGPU / MkKellogg. Scrub lê `temporal`; SuperSplat 3 não é segundo viewer. |
+| GaussianCrowds | Mesmos `temporal` + `relight`; **não** segundo ingest. |
+| ComfyUI opcional | Produtor externo → ficheiros → `ingest_scene`. Sem worker Comfy. |
 
-Regra: **4D = frames temporais + schema de timesteps**. Quem já passa em `ingestScene` / `exportScene` (vídeo Studio, imagens, artefato Comfy, export SuperSplat) não ganha fila nem UI paralela.
+Regra (igual ao contrato): **4D = frames temporais + schema `temporal`**. Quem já passa em `ingest_scene` / `export_scene` não ganha fila nem UI paralela.
 
 ---
 
 ## 5. Incremento implementável agora vs contrato futuro
 
-**Agora (schema / contrato; zero código de pipeline ou viewer neste briefing):**
+**Agora** (schema / contrato; este briefing não pede código de pipeline/viewer):
 
-1. Documentar `SceneIO` = fachada de `ingest_video` / `ingest_images` + `run_export` + `PUT /scenes` — sem nova máquina de estados.
-2. No manifest de vídeo: `timestamps_s` e `t_norm` por frame *kept*, derivados de `probe.fps` (e do índice original, não só da ordem pós-dedup).
-3. Reservar em `SceneDocument` (additive, v1 compatível) `timesteps` opcional e `source_kind` já existente.
-4. Aceitar, no *contrato*, import passivo de sequência `*_tN.ply` (saída `SaveSplats4D`) como o mesmo `backgroundSplat` + lista temporal — implementação do parser fica para um PR de schema, não de job.
+1. Tratar Video2 4DGS como **inspiração de `temporal`**, não como kind. `source_kind=video` (e GIF) já alimentam `TemporalDocument`.
+2. No manifest de vídeo: além de `fps`/`duration_s`, **`timestamps_s` / `t_norm` por frame kept** (índice original pós-ffmpeg, não só a ordem após dedup) — evolução do `ingest.json` já existente.
+3. Documentar interchange Comfy (`*_tN.ply` / `.npz`) como *futuro* da reserva `SEQUENCE_HINT_SUFFIXES` — um PLY por job continua a regra atual.
+4. Não abrir `SourceKind` novo nem embutir ComfyUI.
 
-**Contrato futuro (Fase 6 / SuperSplat 3 / GaussianCrowds):**
+**Contrato futuro** (já escrito em `unified-scene-io.md`):
 
-- Treino deformable/4DGS e player (play/pause/scrub) no viewer, no mesmo job.
-- `exportScene` streamado (SOG/SPZ) no dialeto SuperSplat 3, atrás de `SplatRenderer`.
-- Atributos de relight 4D (faixa GaussianCrowds) no mesmo JSON.
-- ComfyUI continua *produtor externo* opcional; nunca dependência do Provisioner.
+- Sequência 4D importada: um kind/hint, skip de reconstrução, `temporal.frameCount` = N, scrubber no viewer.
+- Treino deformable/4DGS e player (Fase 6 M2) na **mesma** JobMachine.
+- `export_scene` streamado (SOG/LOD SuperSplat 3) quando o contrato de streaming abrir.
+- `relight` (GaussianCrowds) deixa `unsupported` só quando houver backend.
+- ComfyUI permanece produtor externo; nunca dependência do Provisioner.
 
 ---
 
 ## Fora de âmbito (este documento)
 
-Não implementar pipeline, viewer, segundo ingest, nodes Comfy, nem `docs/unified-scene-io.md` aqui. Este ficheiro só amarra o vocabulário para o orquestrador.
+Não implementar pipeline, viewer, segundo ingest, nodes Comfy, nem alterar `pipeline/sceneio/`. Só vocabulário para o orquestrador.

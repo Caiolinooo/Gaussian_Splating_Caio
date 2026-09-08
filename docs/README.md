@@ -6,3 +6,6 @@ Documentação viva do projeto. A **fonte de verdade de alto nível** (visão, a
 - Plano faseado (Fase 0 em andamento): `tasks.md` §5
 - Stack e justificativas: `tasks.md` §6
 - Decisões e riscos: `tasks.md` §7
+- SceneIO (uma superfície): [`unified-scene-io.md`](unified-scene-io.md)
+- Inspiração Video2 / timesteps 4D: [`inspiration-video24dgs.md`](inspiration-video24dgs.md)
+- Inspiração paredes / depth no forward pass: [`inspiration-walls-depth.md`](inspiration-walls-depth.md)
