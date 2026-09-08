@@ -192,7 +192,7 @@ def train_from_settings(settings: Settings) -> Any:
 def colmap_from_settings(settings: Settings) -> Any:
     return SimpleNamespace(
         matcher="auto",
-        use_gpu=True,
+        use_gpu=bool(settings.colmap_use_gpu),
         min_registered_ratio=float(settings.colmap_min_registered_ratio),
         min_registered_count=int(settings.colmap_min_registered_count),
         max_exhaustive_images=int(settings.colmap_max_exhaustive_images),

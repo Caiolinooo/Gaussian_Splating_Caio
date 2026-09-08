@@ -12,6 +12,7 @@ class ArtifactKind(StrEnum):
     PLY = "ply"
     KSPLAT = "ksplat"
     THUMBNAIL = "thumbnail"
+    LOG = "log"
 
 
 class JobAccepted(BaseModel):

@@ -39,6 +39,29 @@ def test_download_known_artifacts(client_as, runtime) -> None:
         assert thumb.content == b"jpeg-bytes"
 
 
+def test_download_log_artifact(client_as, runtime) -> None:
+    with client_as("user-a") as client:
+        created = client.post("/jobs", files=video_files(), data=job_form(key="art-log"))
+        job_id = created.json()["job_id"]
+        record = runtime.machine.get(job_id)
+        colmap_dir = record.work_path / "colmap"
+        colmap_dir.mkdir(parents=True, exist_ok=True)
+        (colmap_dir / "colmap.log").write_text("registro técnico", encoding="utf-8")
+
+        response = client.get(f"/jobs/{job_id}/artifacts/log")
+        assert response.status_code == 200
+        assert response.text == "registro técnico"
+        assert response.headers["content-type"].startswith("text/plain")
+
+
+def test_log_artifact_missing_is_404(client_as) -> None:
+    with client_as("user-a") as client:
+        created = client.post("/jobs", files=video_files(), data=job_form(key="art-log-404"))
+        job_id = created.json()["job_id"]
+        response = client.get(f"/jobs/{job_id}/artifacts/log")
+    assert response.status_code == 404
+
+
 def test_artifact_kind_rejects_traversal(client_as) -> None:
     with client_as("user-a") as client:
         created = client.post("/jobs", files=video_files(), data=job_form(key="art-trav"))

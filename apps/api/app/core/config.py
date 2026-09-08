@@ -6,7 +6,8 @@ Recognised env vars: ``DATA_ROOT``, ``SUPABASE_JWT_SECRET``, ``SUPABASE_URL``,
 ``TOOL_COLMAP``, ``TOOL_PYTHON``, ``TOOL_SIMPLE_TRAINER``, ``TOOL_SPLAT_TRANSFORM``,
 ``TRAIN_MAX_STEPS``, ``TRAIN_DATA_FACTOR``, ``TRAIN_SH_DEGREE``,
 ``COLMAP_MIN_REGISTERED_COUNT``, ``COLMAP_MIN_REGISTERED_RATIO``,
-``COLMAP_MAX_EXHAUSTIVE_IMAGES``, ``CORS_ORIGINS``, ``SERVE_WEB_DIR``.
+``COLMAP_MAX_EXHAUSTIVE_IMAGES``, ``COLMAP_USE_GPU``, ``CORS_ORIGINS``,
+``SERVE_WEB_DIR``.
 """
 
 from __future__ import annotations
@@ -102,6 +103,7 @@ def _read_env() -> dict[str, Any]:
         "COLMAP_MIN_REGISTERED_COUNT": ("colmap_min_registered_count", int),
         "COLMAP_MIN_REGISTERED_RATIO": ("colmap_min_registered_ratio", float),
         "COLMAP_MAX_EXHAUSTIVE_IMAGES": ("colmap_max_exhaustive_images", int),
+        "COLMAP_USE_GPU": ("colmap_use_gpu", _as_bool),
         "CORS_ORIGINS": ("cors_origins", parse_cors_origins),
         "SERVE_WEB_DIR": ("serve_web_dir", _optional_path),
     }
@@ -148,6 +150,9 @@ class Settings(BaseSettings):
     colmap_min_registered_count: int = 20
     colmap_min_registered_ratio: float = 0.70
     colmap_max_exhaustive_images: int = 80
+    # Quando True, o SfM tenta GPU primeiro e cai para CPU automaticamente se
+    # feature_extractor/matcher falharem (servidor headless sem contexto GL).
+    colmap_use_gpu: bool = True
 
     def resolved_data_root(self) -> Path:
         path = self.data_root if self.data_root.is_absolute() else Path.cwd() / self.data_root
