@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type MouseEvent } from 'react';
+import { useEffect, useState, type FormEvent, type MouseEvent } from 'react';
 
 import { AUTH_PATHS, useAuthStore } from './authStore';
 import './auth.css';
@@ -20,9 +20,24 @@ function followLink(
 }
 
 export function LoginPage({ onAuthenticated, onNavigate }: AuthPageProps) {
-  const { signIn, signInWithGoogle, loading, error, info, clearMessages } = useAuthStore();
+  const {
+    signIn,
+    signInWithGoogle,
+    loading,
+    error,
+    info,
+    clearMessages,
+    localAuthEnabled,
+    defaultUsername,
+  } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  useEffect(() => {
+    if (defaultUsername) {
+      setEmail((current) => current || defaultUsername);
+    }
+  }, [defaultUsername]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -48,12 +63,14 @@ export function LoginPage({ onAuthenticated, onNavigate }: AuthPageProps) {
           </div>
         )}
         <div className="auth-field">
-          <label htmlFor="auth-login-email">E-mail</label>
+          <label htmlFor="auth-login-email">
+            {localAuthEnabled ? 'Usuário ou e-mail' : 'E-mail'}
+          </label>
           <input
             id="auth-login-email"
             type="text"
             inputMode="email"
-            autoComplete="email"
+            autoComplete="username"
             value={email}
             onChange={(event) => {
               clearMessages();
@@ -81,19 +98,28 @@ export function LoginPage({ onAuthenticated, onNavigate }: AuthPageProps) {
           <button type="submit" className="primary" disabled={loading}>
             {loading ? 'Entrando…' : 'Entrar'}
           </button>
-          <div className="auth-divider">ou</div>
-          <button type="button" disabled={loading} onClick={() => void signInWithGoogle()}>
-            Continuar com Google
-          </button>
+          {!localAuthEnabled && (
+            <>
+              <div className="auth-divider">ou</div>
+              <button type="button" disabled={loading} onClick={() => void signInWithGoogle()}>
+                Continuar com Google
+              </button>
+            </>
+          )}
         </div>
-        <div className="auth-links">
-          <a href={AUTH_PATHS.signup} onClick={(event) => followLink(event, 'signup', onNavigate)}>
-            Criar conta
-          </a>
-          <a href={AUTH_PATHS.reset} onClick={(event) => followLink(event, 'reset', onNavigate)}>
-            Esqueci a senha
-          </a>
-        </div>
+        {!localAuthEnabled && (
+          <div className="auth-links">
+            <a
+              href={AUTH_PATHS.signup}
+              onClick={(event) => followLink(event, 'signup', onNavigate)}
+            >
+              Criar conta
+            </a>
+            <a href={AUTH_PATHS.reset} onClick={(event) => followLink(event, 'reset', onNavigate)}>
+              Esqueci a senha
+            </a>
+          </div>
+        )}
       </form>
     </main>
   );

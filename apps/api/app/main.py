@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import Settings, settings
-from app.routers import health, jobs, scenes, setup
+from app.routers import auth, health, jobs, scenes, setup
 from app.services.job_runtime import JobRuntime, try_build_pipeline_runtime
 
 
@@ -71,6 +71,7 @@ def create_app(
     )
     app.include_router(health.router)
     app.include_router(setup.router)
+    app.include_router(auth.router)
     app.include_router(jobs.router)
     app.include_router(scenes.router)
     web_dir = cfg.resolved_serve_web_dir()

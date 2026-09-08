@@ -1,5 +1,7 @@
 import { createClient, type Session, type SupabaseClient, type User } from '@supabase/supabase-js';
 
+import { getLocalSession, localSessionAsSupabase } from './localAuth';
+
 const DEV_BYPASS_FLAG = '1';
 const DEV_BYPASS_TOKEN = 'dev-bypass';
 
@@ -78,6 +80,10 @@ export async function getSession(): Promise<Session | null> {
   if (isDevAuthBypass()) {
     return DEV_BYPASS_SESSION;
   }
+  const local = getLocalSession();
+  if (local) {
+    return localSessionAsSupabase(local);
+  }
   const supabase = getSupabaseClient();
   if (!supabase) {
     return null;
@@ -98,6 +104,10 @@ export async function getCurrentUser(): Promise<User | null> {
 export async function getAccessToken(): Promise<string | null> {
   if (isDevAuthBypass()) {
     return DEV_BYPASS_TOKEN;
+  }
+  const local = getLocalSession();
+  if (local) {
+    return local.access_token;
   }
   const session = await getSession();
   return session?.access_token ?? null;

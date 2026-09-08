@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 
 import {
+  clearLocalSession,
+  fetchLocalAuthInfo,
+  getLocalSession,
+  localSessionAsSupabase,
+  signInLocal,
+} from '../../lib/localAuth';
+import {
   getSupabaseClient,
   getSupabaseInitError,
   isDevAuthBypass,
@@ -25,6 +32,9 @@ interface AuthStore {
   loading: boolean;
   error: string | null;
   info: string | null;
+  /** Login local (sem Supabase) habilitado no servidor; `defaultUsername` pré-preenche o campo. */
+  localAuthEnabled: boolean;
+  defaultUsername: string | null;
   initialize: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<boolean>;
   signUp: (email: string, password: string) => Promise<boolean>;
@@ -48,6 +58,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   loading: false,
   error: null,
   info: null,
+  localAuthEnabled: false,
+  defaultUsername: null,
 
   initialize: async () => {
     if (initialized) {
@@ -61,7 +73,26 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
     const client = getSupabaseClient();
     if (!client) {
-      set({ ready: true, error: getSupabaseInitError() });
+      const localInfo = await fetchLocalAuthInfo();
+      const local = getLocalSession();
+      if (local) {
+        const session = localSessionAsSupabase(local);
+        set({
+          ready: true,
+          session,
+          user: session.user,
+          error: null,
+          localAuthEnabled: localInfo.enabled,
+          defaultUsername: localInfo.username,
+        });
+        return;
+      }
+      set({
+        ready: true,
+        error: localInfo.enabled ? null : getSupabaseInitError(),
+        localAuthEnabled: localInfo.enabled,
+        defaultUsername: localInfo.username,
+      });
       return;
     }
     const { data } = await client.auth.getSession();
@@ -75,7 +106,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   signIn: async (email, password) => {
     set({ loading: true, error: null, info: null });
-    if (!isValidEmail(email, { allowDevLocalhost: isDevAuthBypass() })) {
+    const localOnly = !isDevAuthBypass() && !getSupabaseClient();
+    if (!localOnly && !isValidEmail(email, { allowDevLocalhost: isDevAuthBypass() })) {
       set({ loading: false, error: 'Informe um e-mail válido.' });
       return false;
     }
@@ -89,8 +121,15 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
     const client = getSupabaseClient();
     if (!client) {
-      set({ loading: false, error: getSupabaseInitError() });
-      return false;
+      const result = await signInLocal(email, password);
+      if (!result.ok) {
+        set({ loading: false, error: result.error });
+        return false;
+      }
+      const local = getLocalSession();
+      const session = local ? localSessionAsSupabase(local) : null;
+      set({ loading: false, session, user: session?.user ?? null, error: null });
+      return true;
     }
     const { data, error } = await client.auth.signInWithPassword({
       email: email.trim(),
@@ -203,6 +242,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     if (client && !isDevAuthBypass()) {
       await client.auth.signOut();
     }
+    clearLocalSession();
     set({
       session: null,
       user: isDevAuthBypass() ? DEV_BYPASS_USER : null,

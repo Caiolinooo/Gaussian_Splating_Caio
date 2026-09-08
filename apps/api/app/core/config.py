@@ -7,7 +7,7 @@ Recognised env vars: ``DATA_ROOT``, ``SUPABASE_JWT_SECRET``, ``SUPABASE_URL``,
 ``TRAIN_MAX_STEPS``, ``TRAIN_DATA_FACTOR``, ``TRAIN_SH_DEGREE``,
 ``COLMAP_MIN_REGISTERED_COUNT``, ``COLMAP_MIN_REGISTERED_RATIO``,
 ``COLMAP_MAX_EXHAUSTIVE_IMAGES``, ``COLMAP_USE_GPU``, ``CORS_ORIGINS``,
-``SERVE_WEB_DIR``.
+``SERVE_WEB_DIR``, ``LOCAL_AUTH_USER``, ``LOCAL_AUTH_PASSWORD``.
 """
 
 from __future__ import annotations
@@ -106,6 +106,8 @@ def _read_env() -> dict[str, Any]:
         "COLMAP_USE_GPU": ("colmap_use_gpu", _as_bool),
         "CORS_ORIGINS": ("cors_origins", parse_cors_origins),
         "SERVE_WEB_DIR": ("serve_web_dir", _optional_path),
+        "LOCAL_AUTH_USER": ("local_auth_user", str),
+        "LOCAL_AUTH_PASSWORD": ("local_auth_password", str),
     }
     values: dict[str, Any] = {}
     for env_name, (field_name, conv) in mapping.items():
@@ -134,6 +136,10 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_jwks_url: str = ""
     dev_auth_bypass: bool = False
+    # Login local sem Supabase: quando ambos definidos, POST /auth/login emite
+    # JWT HS256 (assinado com supabase_jwt_secret) para este usuário.
+    local_auth_user: str = ""
+    local_auth_password: str = ""
     pipeline_path: Path = Path("../../pipeline")
     max_upload_mb: int = 2048
     max_video_duration_s: float = 1200.0
