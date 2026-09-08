@@ -5,6 +5,20 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased]
+
+### Corrigido
+
+- **SfM resiliente no servidor headless**: se `feature_extractor`/matcher falharem com GPU (sem contexto OpenGL/X ou COLMAP sem CUDA), o pipeline limpa o estado parcial e repete o grafo COLMAP uma vez com `use_gpu=0` em vez de derrubar o job. Novo env `COLMAP_USE_GPU=0` força CPU desde o início.
+- **Retry de job não herda mais estado parcial**: `database.db` (+ `-wal`/`-shm`) e `sparse/` de tentativas anteriores são removidos antes de cada tentativa do SfM — o `mapper` não escreve mais em `sparse/1` enquanto o `model_converter` lê um `sparse/0` velho.
+- **Setup detecta COLMAP quebrado**: `detect_colmap` marca ERRO quando `colmap -h` sai com código não-zero (ex.: `libGL`/CUDA runtime ausentes), em vez de reportar OK.
+- **Export não derruba mais o job sem splat-transform**: removido o fallback para `npx` (que fazia o npm tentar executar o `.ply` como pacote e falhava com `TRANSFORM_FAILED`); sem o binário do usuário, o `.ksplat` é omitido e o `.ply` mestre segue — comportamento documentado. Erros de "pacote npm ausente" também passam a ser tratados como skip.
+
+### Adicionado
+
+- **Registro técnico do COLMAP por job**: stdout/stderr de cada comando é gravado em `colmap/colmap.log` (mesmo em falha) e baixável em `GET /jobs/{id}/artifacts/log`; a tela do job ganha o botão "Baixar registro COLMAP".
+- Métrica `used_gpu` e artefato `log` no estágio `sfm`.
+
 ## [0.2.0] - 2026-09-08
 
 Pipeline real no servidor GPU (L4 24GB): Provisioner instala ffmpeg/PyTorch/gsplat; COLMAP só é localizado (nunca compilado pelo app).

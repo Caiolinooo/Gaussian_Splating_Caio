@@ -1,7 +1,8 @@
 # Tasks — Plataforma de Gaussian Splatting a partir de Vídeo
 
 > Plano de ação de alto nível. Documento vivo: atualizar a cada fase concluída.
-> Última revisão: 2026-09-08 (7ª revisão — **0.2.0 no servidor L4**: Provisioner real (ffmpeg/PyTorch/gsplat); COLMAP só localizado, nunca compilado pelo app; defaults de VRAM/RAM; export `.ply` se faltar splat-transform. **Ainda não marcado**: treino 3DGS longo verificado no browser, E2E Playwright no CI, sidecar Tauri).
+> Última revisão: 2026-09-08 (8ª revisão — **hotfix SfM headless**: fallback automático GPU→CPU no grafo COLMAP quando `feature_extractor`/matcher falham (servidor sem contexto GL); limpeza de `database.db`/`sparse/` stale antes de cada tentativa (retry não herda mais estado parcial); log técnico do COLMAP persistido em `colmap/colmap.log` e baixável via `GET /jobs/{id}/artifacts/log` + botão "Baixar registro COLMAP" na UI; Setup marca ERRO se `colmap -h` retorna não-zero; novo env `COLMAP_USE_GPU`. Gatilho: job `1fbb35e2` falhou em `feature_extractor` no servidor L4).
+> Revisão anterior: 2026-09-08 (7ª revisão — **0.2.0 no servidor L4**: Provisioner real (ffmpeg/PyTorch/gsplat); COLMAP só localizado, nunca compilado pelo app; defaults de VRAM/RAM; export `.ply` se faltar splat-transform. **Ainda não marcado**: treino 3DGS longo verificado no browser, E2E Playwright no CI, sidecar Tauri).
 > Revisão anterior: 2026-09-08 (5ª revisão — **auditoria UI/workflow local, sem GPU**: typecheck/lint/Vitest/pytest verdes; API+web subidos com bypass de auth; fluxo `/` `/setup` `/login` `/jobs` `/upload` `/jobs/:id` `/viewer` exercitado no Edge. Job sintético de 20 imagens falhou no SfM sem disparar treino).
 
 ---
