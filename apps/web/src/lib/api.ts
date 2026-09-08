@@ -114,8 +114,16 @@ export class ApiError extends Error {
 }
 
 export function getApiBaseUrl(): string {
-  const raw = import.meta.env.VITE_API_URL ?? DEFAULT_API_URL;
-  return raw.replace(/\/+$/, '');
+  const raw = import.meta.env.VITE_API_URL;
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    return raw.replace(/\/+$/, '');
+  }
+  // Build servido pela própria API (SERVE_WEB_DIR): mesmo host/porta da página.
+  // Fora do dev server do Vite (5173), relativo à origem é o caminho certo.
+  if (typeof window !== 'undefined' && window.location?.origin && window.location.port !== '5173') {
+    return window.location.origin;
+  }
+  return DEFAULT_API_URL;
 }
 
 export function isRetryableStatus(status: number): boolean {

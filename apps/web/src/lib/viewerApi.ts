@@ -37,8 +37,12 @@ const DEFAULT_API_URL = 'http://localhost:8000';
 
 export function getViewerApiBaseUrl(): string {
   const fromEnv = import.meta.env.VITE_API_URL;
-  if (typeof fromEnv === 'string' && fromEnv.length > 0) {
-    return fromEnv.replace(/\/$/, '');
+  if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
+    return fromEnv.replace(/\/+$/, '');
+  }
+  // Mesmo fallback same-origin de getApiBaseUrl (build servido pela API).
+  if (typeof window !== 'undefined' && window.location?.origin && window.location.port !== '5173') {
+    return window.location.origin;
   }
   return DEFAULT_API_URL;
 }
