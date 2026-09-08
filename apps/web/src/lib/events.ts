@@ -1,4 +1,10 @@
-import { httpToWsUrl, parseJobEvent, type JobEvent } from '../features/jobs/eventParse';
+import {
+  httpToWsUrl,
+  parseJobEvent,
+  shouldAttemptReconnect,
+  type JobEvent,
+} from '../features/jobs/eventParse';
+import { isTerminalState } from '../features/jobs/stages';
 import { getApiBaseUrl, getAuthHeaders } from './api';
 import { getAccessToken } from './supabase';
 
@@ -8,8 +14,10 @@ export {
   isPipelineStage,
   normalizeProgress,
   parseJobEvent,
+  shouldAttemptReconnect,
   type JobEvent,
   type JobEventMetrics,
+  type ReconnectDecision,
 } from '../features/jobs/eventParse';
 
 /**
@@ -28,6 +36,7 @@ export interface SubscribeJobEventsOptions {
   onEvent: (event: JobEvent) => void;
   onState?: (state: EventsConnectionState, transport: EventTransport) => void;
   onFallbackPoll?: () => void;
+  shouldStopReconnect?: () => boolean;
   wsMaxAttempts?: number;
   sseMaxAttempts?: number;
   pollIntervalMs?: number;
@@ -85,6 +94,7 @@ export function subscribeJobEvents(jobId: string, options: SubscribeJobEventsOpt
   const maxBackoffMs = options.maxBackoffMs ?? 15_000;
 
   let closed = false;
+  let terminalReached = false;
   let socket: WebSocket | null = null;
   let abortSse: AbortController | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -92,8 +102,35 @@ export function subscribeJobEvents(jobId: string, options: SubscribeJobEventsOpt
   let transport: EventTransport = 'ws';
 
   const setState = (state: EventsConnectionState) => {
+    if (terminalReached && (state === 'reconnecting' || state === 'connecting')) {
+      options.onState?.('closed', transport);
+      return;
+    }
     options.onState?.(state, transport);
   };
+
+  const finishTerminal = () => {
+    terminalReached = true;
+    closed = true;
+    clearTimers();
+    if (socket) {
+      socket.close();
+      socket = null;
+    }
+    abortSse?.abort();
+    abortSse = null;
+    setState('closed');
+  };
+
+  const deliverEvent = (event: JobEvent) => {
+    options.onEvent(event);
+    if (isTerminalState(event.state)) {
+      finishTerminal();
+    }
+  };
+
+  const stopReconnect = (): boolean =>
+    closed || terminalReached || Boolean(options.shouldStopReconnect?.());
 
   const clearTimers = () => {
     if (reconnectTimer !== null) {
@@ -121,7 +158,7 @@ export function subscribeJobEvents(jobId: string, options: SubscribeJobEventsOpt
   };
 
   const connectSse = (attempt: number) => {
-    if (closed) {
+    if (stopReconnect()) {
       return;
     }
     transport = 'sse';
@@ -136,6 +173,10 @@ export function subscribeJobEvents(jobId: string, options: SubscribeJobEventsOpt
           signal: abortSse.signal,
         });
         if (!response.ok || !response.body) {
+          if (response.status === 404 || response.status === 405) {
+            startPolling();
+            return;
+          }
           throw new Error(`sse-http-${response.status}`);
         }
         setState('live');
@@ -147,16 +188,26 @@ export function subscribeJobEvents(jobId: string, options: SubscribeJobEventsOpt
           if (done) {
             break;
           }
-          buffer = parseSseChunk(buffer + decoder.decode(value, { stream: true }), options.onEvent);
+          buffer = parseSseChunk(buffer + decoder.decode(value, { stream: true }), deliverEvent);
         }
-        if (!closed) {
-          throw new Error('sse-ended');
+        if (stopReconnect()) {
+          return;
         }
+        throw new Error('sse-ended');
       } catch (error) {
         if (closed || (error instanceof DOMException && error.name === 'AbortError')) {
           return;
         }
-        if (attempt + 1 >= sseMaxAttempts) {
+        const decision = shouldAttemptReconnect({
+          closed,
+          terminalReached,
+          attempt,
+          maxAttempts: sseMaxAttempts,
+        });
+        if (decision === 'stop') {
+          return;
+        }
+        if (decision === 'fallback') {
           startPolling();
           return;
         }
@@ -170,7 +221,7 @@ export function subscribeJobEvents(jobId: string, options: SubscribeJobEventsOpt
   };
 
   const connectWs = (attempt: number) => {
-    if (closed) {
+    if (stopReconnect()) {
       return;
     }
     if (typeof WebSocket === 'undefined') {
@@ -181,7 +232,7 @@ export function subscribeJobEvents(jobId: string, options: SubscribeJobEventsOpt
     setState(attempt === 0 ? 'connecting' : 'reconnecting');
 
     void eventsUrl(jobId, true).then((httpUrl) => {
-      if (closed) {
+      if (stopReconnect()) {
         return;
       }
       try {
@@ -200,7 +251,7 @@ export function subscribeJobEvents(jobId: string, options: SubscribeJobEventsOpt
       socket.onmessage = (message) => {
         const parsed = parseJobEvent(message.data);
         if (parsed) {
-          options.onEvent(parsed);
+          deliverEvent(parsed);
         }
       };
 
@@ -210,10 +261,21 @@ export function subscribeJobEvents(jobId: string, options: SubscribeJobEventsOpt
 
       socket.onclose = () => {
         socket = null;
-        if (closed) {
+        if (stopReconnect()) {
+          setState('closed');
           return;
         }
-        if (attempt + 1 >= wsMaxAttempts) {
+        const decision = shouldAttemptReconnect({
+          closed,
+          terminalReached,
+          attempt,
+          maxAttempts: wsMaxAttempts,
+        });
+        if (decision === 'stop') {
+          setState('closed');
+          return;
+        }
+        if (decision === 'fallback') {
           connectSse(0);
           return;
         }

@@ -10,7 +10,7 @@ from typing import Literal, Protocol
 
 from sfm.commands import build_sfm_pipeline_commands
 from sfm.config import ColmapConfig, ColmapPaths, SourceKind
-from sfm.errors import colmap_failed, no_reconstruction
+from sfm.errors import colmap_failed, colmap_missing, no_reconstruction
 from sfm.parse import ReconstructionSummary, count_input_images, summarize_reconstruction
 
 LOGGER = logging.getLogger("pipeline.sfm")
@@ -74,7 +74,14 @@ def run_sfm(
         if progress is not None:
             progress(index / total, label)
         LOGGER.info("event=colmap_step step=%s argv=%s", argv[1], " ".join(argv))
-        result = runner.run(argv, timeout_s=config.timeout_s)
+        try:
+            result = runner.run(argv, timeout_s=config.timeout_s)
+        except FileNotFoundError as exc:
+            raise colmap_missing(str(argv[0])) from exc
+        except OSError as exc:
+            if getattr(exc, "errno", None) in {2, 3} or getattr(exc, "winerror", None) == 2:
+                raise colmap_missing(str(argv[0])) from exc
+            raise
         text = f"{result.stdout}\n{result.stderr}"
         chunks.append(text)
         if result.returncode != 0:

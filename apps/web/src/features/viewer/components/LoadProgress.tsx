@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 import { useViewerStore } from '../store/viewerStore';
 
 export function LoadProgress() {
@@ -18,7 +20,13 @@ export function LoadProgress() {
   return (
     <div className="gs-load" role="status" aria-live="polite">
       {error ? (
-        <p className="gs-load-error">{error}</p>
+        <>
+          <p className="gs-load-error">{error}</p>
+          <div className="gs-load-actions">
+            <Link to="/jobs">Ver jobs</Link>
+            <Link to="/upload">Novo upload</Link>
+          </div>
+        </>
       ) : (
         <>
           <p>{label || 'Carregando…'}</p>

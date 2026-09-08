@@ -75,7 +75,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   signIn: async (email, password) => {
     set({ loading: true, error: null, info: null });
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(email, { allowDevLocalhost: isDevAuthBypass() })) {
       set({ loading: false, error: 'Informe um e-mail válido.' });
       return false;
     }
@@ -106,7 +106,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   signUp: async (email, password) => {
     set({ loading: true, error: null, info: null });
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(email, { allowDevLocalhost: isDevAuthBypass() })) {
       set({ loading: false, error: 'Informe um e-mail válido.' });
       return false;
     }
@@ -168,7 +168,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   resetPassword: async (email) => {
     set({ loading: true, error: null, info: null });
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(email, { allowDevLocalhost: isDevAuthBypass() })) {
       set({ loading: false, error: 'Informe um e-mail válido.' });
       return false;
     }

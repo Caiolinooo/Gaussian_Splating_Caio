@@ -73,6 +73,18 @@ export function mapAuthError(
   return 'Não foi possível concluir. Tente novamente.';
 }
 
-export function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+export interface EmailValidationOptions {
+  /** Aceita `dev@localhost` e outros `@localhost` só no bypass de desenvolvimento. */
+  allowDevLocalhost?: boolean;
+}
+
+export function isValidEmail(value: string, options: EmailValidationOptions = {}): boolean {
+  const trimmed = value.trim();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return true;
+  }
+  if (options.allowDevLocalhost && /^[^\s@]+@localhost$/i.test(trimmed)) {
+    return true;
+  }
+  return false;
 }

@@ -51,7 +51,8 @@ export function LoginPage({ onAuthenticated, onNavigate }: AuthPageProps) {
           <label htmlFor="auth-login-email">E-mail</label>
           <input
             id="auth-login-email"
-            type="email"
+            type="text"
+            inputMode="email"
             autoComplete="email"
             value={email}
             onChange={(event) => {

@@ -4,13 +4,19 @@ import { useState } from 'react';
 import { formatMeters, toMeters } from '../../lib/unitsBinding';
 import { assertNever } from '../viewer/assertNever';
 import { useViewerRuntime } from '../viewer/runtime/ViewerRuntimeContext';
+import { useViewerStore } from '../viewer/store/viewerStore';
 import { useCalibrationStore } from './store/calibrationStore';
 
 export function CalibrationGate() {
   const controller = useViewerRuntime();
   const phase = useCalibrationStore((state) => state.gatePhase);
   const unit = useCalibrationStore((state) => state.unitPref.unit);
+  const loadPhase = useViewerStore((state) => state.loadPhase);
   const [adjustValue, setAdjustValue] = useState('');
+
+  if (loadPhase === 'error') {
+    return null;
+  }
 
   switch (phase) {
     case 'hidden':

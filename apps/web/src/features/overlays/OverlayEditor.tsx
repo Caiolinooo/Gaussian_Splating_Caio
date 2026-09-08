@@ -5,7 +5,7 @@ import { isCalibrated } from '../calibration/math/scaleFactor';
 import { useCalibrationStore } from '../calibration/store/calibrationStore';
 import { useViewerRuntime } from '../viewer/runtime/ViewerRuntimeContext';
 import { OverlayList } from './OverlayList';
-import { overlayKindLabelPt } from './overlayPersist';
+import { blendModeLabelPt, overlayKindLabelPt } from './overlayPersist';
 import { useOverlayStore } from './store/overlayStore';
 
 const KINDS: OverlayKind[] = ['paint', 'wallpaper', 'sticker'];
@@ -157,7 +157,7 @@ export function OverlayEditor() {
         >
           {BLENDS.map((mode) => (
             <option key={mode} value={mode}>
-              {blendLabel(mode)}
+              {blendModeLabelPt(mode)}
             </option>
           ))}
         </select>
@@ -184,17 +184,3 @@ export function OverlayEditor() {
   );
 }
 
-function blendLabel(mode: BlendMode): string {
-  switch (mode) {
-    case 'normal':
-      return 'Normal';
-    case 'multiply':
-      return 'Multiply';
-    case 'overlay':
-      return 'Overlay';
-    default: {
-      const exhaustive: never = mode;
-      return String(exhaustive);
-    }
-  }
-}

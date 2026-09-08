@@ -34,6 +34,8 @@ caminho suportado.
 | `SUPABASE_URL`                                                                                                  | (vazio)            | Base para JWKS (`/auth/v1/.well-known/jwks.json`) se o token for ES256 |
 | `SUPABASE_JWKS_URL`                                                                                             | (vazio)            | Override do JWKS                                                       |
 | `DEV_AUTH_BYPASS`                                                                                               | `0`                | `1`/`true` → usuário fixo `dev-user` (sem token)                       |
+| `CORS_ORIGINS`                                                                                                  | localhost:5173/2222 | CSV ou JSON; `*` libera origem (sem credentials)                      |
+| `SERVE_WEB_DIR`                                                                                                 | (vazio)            | Pasta `apps/web/dist` para UI+API no mesmo processo                    |
 | `PIPELINE_PATH`                                                                                                 | `../../pipeline`   | Onde está o pacote `jobs`                                              |
 | `MAX_UPLOAD_MB`                                                                                                 | `2048`             | Teto de upload (vídeo ou soma das imagens)                             |
 | `MAX_VIDEO_DURATION_S`                                                                                          | `1200`             | Duração máxima (só se `ffprobe` estiver disponível)                    |

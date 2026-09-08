@@ -32,7 +32,8 @@ export function ResetPage({ onNavigate }: AuthPageProps) {
           <label htmlFor="auth-reset-email">E-mail</label>
           <input
             id="auth-reset-email"
-            type="email"
+            type="text"
+            inputMode="email"
             autoComplete="email"
             value={email}
             onChange={(event) => {

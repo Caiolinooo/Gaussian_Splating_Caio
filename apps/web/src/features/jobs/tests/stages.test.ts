@@ -6,6 +6,7 @@ import {
   estimateEtaSeconds,
   isTerminalState,
   jobStateLabel,
+  remainingEtaLabel,
 } from '../stages';
 
 describe('jobStateLabel', () => {
@@ -31,6 +32,18 @@ describe('estimateEtaSeconds', () => {
 
   it('devolve nulo sem progresso', () => {
     expect(estimateEtaSeconds(10_000, 0)).toBeNull();
+  });
+});
+
+describe('remainingEtaLabel', () => {
+  it('esconde o ETA em estados terminais', () => {
+    expect(remainingEtaLabel('error', 120)).toBeNull();
+    expect(remainingEtaLabel('cancelled', 30)).toBeNull();
+    expect(remainingEtaLabel('done', 0)).toBeNull();
+  });
+
+  it('formata o ETA enquanto o job corre', () => {
+    expect(remainingEtaLabel('training', 120)).toMatch(/min/);
   });
 });
 

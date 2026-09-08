@@ -146,6 +146,10 @@ def to_detail(record: Any) -> JobDetail:
 
 def snapshot_payload(record: Any) -> ProgressPayload:
     stage, fraction = _running_stage(record)
+    error_code = getattr(record, "error_code", None)
+    metrics: dict[str, Any] = {}
+    if isinstance(error_code, str) and error_code:
+        metrics["error_code"] = error_code
     return ProgressPayload(
         job_id=str(record.job_id),
         state=enum_value(record.state),
@@ -153,7 +157,7 @@ def snapshot_payload(record: Any) -> ProgressPayload:
         stage_progress=fraction,
         overall_progress=overall_progress(record),
         message=_latest_message(record),
-        metrics={},
+        metrics=metrics,
         timestamp=str(getattr(record, "updated_at", "") or ""),
     )
 

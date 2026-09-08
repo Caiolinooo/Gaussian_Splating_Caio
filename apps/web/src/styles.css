@@ -21,6 +21,66 @@
   box-sizing: border-box;
 }
 
+.app-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid #2b3554;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.app-nav-brand {
+  font-weight: 700;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.app-nav-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app-nav-link {
+  display: inline-block;
+  padding: 0.35rem 0.7rem;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.app-nav-link:hover {
+  color: var(--text);
+  background: var(--surface-alt);
+}
+
+.app-nav-link.is-active {
+  color: #fff;
+  background: var(--accent);
+}
+
+.app-shell-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 body {
   margin: 0;
   background: var(--bg);

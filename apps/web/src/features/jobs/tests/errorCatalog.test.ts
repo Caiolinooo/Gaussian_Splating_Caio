@@ -18,4 +18,14 @@ describe('explainJobError', () => {
     const explained = explainJobError('WEIRD', null);
     expect(explained.action).toMatch(/registro/i);
   });
+
+  it('explica COLMAP_FAILED com dica de Setup', () => {
+    const explained = explainJobError(
+      'COLMAP_FAILED',
+      'O COLMAP não está instalado ou não foi encontrado neste ambiente.',
+    );
+    expect(explained.title).toMatch(/COLMAP/i);
+    expect(explained.message).toMatch(/não está instalado/i);
+    expect(explained.action).toMatch(/Setup/i);
+  });
 });

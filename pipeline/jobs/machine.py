@@ -22,8 +22,34 @@ from jobs.states import (
     stage_to_state,
 )
 from jobs.store import JobStore
+from sfm.errors import COLMAP_MISSING_USER
 
 LOGGER = logging.getLogger("pipeline.jobs")
+
+
+def _looks_like_missing_executable(exc: BaseException) -> bool:
+    if isinstance(exc, FileNotFoundError):
+        return True
+    if isinstance(exc, OSError) and getattr(exc, "errno", None) in {2, 3}:
+        return True
+    return getattr(exc, "winerror", None) == 2
+
+
+def classify_stage_error(stage_name: str, exc: BaseException) -> tuple[str, str]:
+    """Preserve coded pipeline errors; map a missing COLMAP binary to COLMAP_FAILED."""
+    user_message = getattr(exc, "user_message", None)
+    code = getattr(exc, "code", None)
+    if isinstance(code, str) and isinstance(user_message, str) and user_message.strip():
+        return code, user_message
+    if isinstance(code, str):
+        fallback = user_message if isinstance(user_message, str) and user_message.strip() else str(exc)
+        return code, fallback
+    text = f"{exc} {getattr(exc, 'filename', '')}".lower()
+    if stage_name == "sfm" and (_looks_like_missing_executable(exc) or "colmap" in text):
+        return "COLMAP_FAILED", COLMAP_MISSING_USER
+    if isinstance(user_message, str) and user_message.strip():
+        return "PIPELINE_ERROR", user_message
+    return "PIPELINE_ERROR", "Falha inesperada no pipeline."
 
 
 def resume_stage(record: JobRecord) -> str | None:
@@ -229,10 +255,7 @@ class JobMachine:
         LOGGER.info("event=job_interrupted job_id=%s stage=%s", record.job_id, stage_name)
 
     def _mark_error(self, record: JobRecord, stage_name: str, exc: BaseException) -> JobRecord:
-        user_message = getattr(exc, "user_message", None)
-        code = getattr(exc, "code", None)
-        message = user_message if isinstance(user_message, str) else "Falha inesperada no pipeline."
-        error_code = code if isinstance(code, str) else "PIPELINE_ERROR"
+        error_code, message = classify_stage_error(stage_name, exc)
         stage = record.stages[stage_name]
         stage.status = StageStatus.FAILED
         stage.finished_at = utcnow().isoformat()
@@ -247,7 +270,13 @@ class JobMachine:
             record.state = JobState.ERROR
             record.updated_at = utcnow().isoformat()
         self.store.save(record)
-        self._emit(record, stage=stage_name, fraction=stage.progress, message=message)
+        self._emit(
+            record,
+            stage=stage_name,
+            fraction=stage.progress,
+            message=message,
+            metrics={"error_code": error_code},
+        )
         LOGGER.info("event=job_error job_id=%s stage=%s code=%s", record.job_id, stage_name, error_code)
         return record
 

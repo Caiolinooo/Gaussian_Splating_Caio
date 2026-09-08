@@ -2,21 +2,24 @@ import { useEffect } from 'react';
 import {
   BrowserRouter,
   Navigate,
-  Outlet,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useParams,
   useSearchParams,
 } from 'react-router-dom';
 
+import { AppShell } from './components/AppShell';
 import { SetupScreen } from './components/SetupScreen';
-import { AuthGuard, AUTH_PATHS, AuthRoute, useAuthStore } from './features/auth';
+import { AUTH_PATHS, AuthRoute, useAuthStore } from './features/auth';
 import { CalibrationRoute } from './features/calibration';
 import { EditingRoute } from './features/editing';
 import { JobProgressRoute, JobsRoute, UploadRoute } from './features/jobs';
 import { OverlayRoute } from './features/overlays';
 import { ViewerRoute } from './features/viewer';
+import { usePageTitle } from './hooks/usePageTitle';
+import { titleForPath } from './lib/pageTitle';
 
 function AuthBootstrap() {
   const initialize = useAuthStore((state) => state.initialize);
@@ -37,12 +40,10 @@ function AuthPages({ page }: { page: 'login' | 'signup' | 'reset' }) {
   );
 }
 
-function ProtectedLayout() {
-  return (
-    <AuthGuard>
-      <Outlet />
-    </AuthGuard>
-  );
+function RouteTitle() {
+  const { pathname } = useLocation();
+  usePageTitle(titleForPath(pathname));
+  return null;
 }
 
 function JobsPage() {
@@ -117,12 +118,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthBootstrap />
+      <RouteTitle />
       <Routes>
         <Route path="/login" element={<AuthPages page="login" />} />
         <Route path="/signup" element={<AuthPages page="signup" />} />
         <Route path="/reset" element={<AuthPages page="reset" />} />
         <Route path="/setup" element={<SetupScreen />} />
-        <Route element={<ProtectedLayout />}>
+        <Route element={<AppShell />}>
           <Route path="/" element={<Navigate to="/jobs" replace />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/upload" element={<UploadPage />} />

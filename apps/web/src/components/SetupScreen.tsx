@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { useSetupStore } from '../store/setupStore';
+import { AppChrome } from './AppShell';
 import { checkStatusLabel, statusIcon, stepStatusLabel } from './status';
 
 /** Tela inicial: UI de Setup do Provisioner (relatório de saúde + progresso da instalação). */
@@ -42,6 +43,7 @@ export function SetupScreen() {
   }
 
   return (
+    <AppChrome>
     <main className="setup-screen">
       <header className="setup-header">
         <h1>Configuração do ambiente</h1>
@@ -162,5 +164,6 @@ export function SetupScreen() {
         )}
       </section>
     </main>
+    </AppChrome>
   );
 }

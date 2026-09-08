@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import type { EventsConnectionState } from '../../lib/events';
 import { explainJobError } from './errorCatalog';
 import { useJobsStore } from './jobsStore';
 import {
   asDisplayPercent,
   buildTimeline,
   estimateEtaSeconds,
-  formatEta,
+  isTerminalState,
   jobStateLabel,
+  remainingEtaLabel,
   stageStatusLabel,
 } from './stages';
+import type { JobState } from './types';
 import { OPEN_SCENE_EVENT, type OpenSceneDetail } from './types';
 import './jobs.css';
 
@@ -19,7 +22,10 @@ export interface JobProgressScreenProps {
   onBack?: () => void;
 }
 
-function connectionLabel(state: string): string {
+function connectionLabel(state: EventsConnectionState, jobState?: JobState | null): string {
+  if (jobState && isTerminalState(jobState)) {
+    return 'Estado final';
+  }
   switch (state) {
     case 'live':
       return 'Ao vivo';
@@ -31,8 +37,10 @@ function connectionLabel(state: string): string {
       return 'Atualizando por consulta';
     case 'closed':
       return 'Desconectado';
-    default:
-      return state;
+    default: {
+      const exhaustive: never = state;
+      return String(exhaustive);
+    }
   }
 }
 
@@ -87,6 +95,7 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
   }, [job, timeline]);
 
   const etaSeconds = job?.eta_seconds ?? estimateEtaSeconds(Date.now() - startedAt, overall);
+  const etaLabel = job ? remainingEtaLabel(job.state, etaSeconds) : null;
   const explained =
     job?.state === 'error' ? explainJobError(job.error_code, job.error_message) : null;
 
@@ -120,7 +129,7 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
             {job ? ` · ${jobStateLabel(job.state)}` : ''}
           </p>
           <p className={connection === 'live' ? 'jobs-connection is-live' : 'jobs-connection'}>
-            {connectionLabel(connection)}
+            {connectionLabel(connection, job?.state)}
             {lastEventAt
               ? ` · última atualização ${new Date(lastEventAt).toLocaleTimeString('pt-BR')}`
               : ''}
@@ -164,7 +173,8 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
               />
             </div>
             <p className="muted">
-              {asDisplayPercent(overall)}% · tempo restante: {formatEta(etaSeconds)}
+              {asDisplayPercent(overall)}%
+              {etaLabel ? ` · tempo restante: ${etaLabel}` : ''}
             </p>
           </div>
 

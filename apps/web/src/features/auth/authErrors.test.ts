@@ -21,4 +21,14 @@ describe('isValidEmail', () => {
     expect(isValidEmail('')).toBe(false);
     expect(isValidEmail('pessoa@')).toBe(false);
   });
+
+  it('rejeita dev@localhost fora do bypass', () => {
+    expect(isValidEmail('dev@localhost')).toBe(false);
+  });
+
+  it('aceita dev@localhost no bypass de desenvolvimento', () => {
+    expect(isValidEmail('dev@localhost', { allowDevLocalhost: true })).toBe(true);
+    expect(isValidEmail('pessoa@exemplo.com', { allowDevLocalhost: true })).toBe(true);
+    expect(isValidEmail('pessoa@', { allowDevLocalhost: true })).toBe(false);
+  });
 });

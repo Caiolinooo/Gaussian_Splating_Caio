@@ -119,6 +119,56 @@ def test_ws_accepts_access_token_query(tmp_path) -> None:
             assert snapshot["job_id"] == job_id
 
 
+def test_sse_sends_snapshot_for_done_job(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    runtime = build_fake_runtime(settings)
+    app = create_app(settings_override=settings, runtime=runtime)
+    token = _token("user-a")
+    with TestClient(app) as client:
+        created = client.post(
+            "/jobs",
+            files=video_files(),
+            data=job_form(key="sse-done"),
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert created.status_code == 202
+        job_id = created.json()["job_id"]
+        for _ in range(50):
+            detail = client.get(f"/jobs/{job_id}", headers={"Authorization": f"Bearer {token}"})
+            if detail.json()["state"] == "done":
+                break
+            time.sleep(0.05)
+        response = client.get(
+            f"/jobs/{job_id}/events",
+            headers={"Authorization": f"Bearer {token}", "Accept": "text/event-stream"},
+        )
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers.get("content-type", "")
+        assert '"state": "done"' in response.text or '"state":"done"' in response.text
+        assert job_id in response.text
+
+
+def test_sse_forbidden_for_other_user(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    runtime = build_fake_runtime(settings)
+    app = create_app(settings_override=settings, runtime=runtime)
+    token_a = _token("user-a")
+    token_b = _token("user-b")
+    with TestClient(app) as client:
+        created = client.post(
+            "/jobs",
+            files=video_files(),
+            data=job_form(key="sse-iso"),
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+        job_id = created.json()["job_id"]
+        denied = client.get(
+            f"/jobs/{job_id}/events",
+            headers={"Authorization": f"Bearer {token_b}", "Accept": "text/event-stream"},
+        )
+        assert denied.status_code == 403
+
+
 def test_ws_rejects_missing_token(tmp_path) -> None:
     settings = make_settings(tmp_path, dev_auth_bypass=False)
     runtime = build_fake_runtime(settings)

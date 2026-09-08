@@ -2,12 +2,30 @@ import type { JobState, PipelineStage } from '../../lib/api';
 
 export interface JobEventMetrics {
   eta_seconds?: number;
+  error_code?: string;
   registered_images?: number;
   num_gaussians?: number;
   psnr?: number;
   scale_factor?: number;
   confidence?: number;
   [key: string]: unknown;
+}
+
+export type ReconnectDecision = 'stop' | 'retry' | 'fallback';
+
+export function shouldAttemptReconnect(input: {
+  closed: boolean;
+  terminalReached: boolean;
+  attempt: number;
+  maxAttempts: number;
+}): ReconnectDecision {
+  if (input.closed || input.terminalReached) {
+    return 'stop';
+  }
+  if (input.attempt + 1 >= input.maxAttempts) {
+    return 'fallback';
+  }
+  return 'retry';
 }
 
 export interface JobEvent {

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { httpToWsUrl, isJobState, normalizeProgress, parseJobEvent } from '../eventParse';
+import {
+  httpToWsUrl,
+  isJobState,
+  normalizeProgress,
+  parseJobEvent,
+  shouldAttemptReconnect,
+} from '../eventParse';
 
 describe('parseJobEvent', () => {
   it('aceita o contrato WS/SSE', () => {
@@ -46,6 +52,26 @@ describe('parseJobEvent', () => {
     expect(parseJobEvent({ foo: 1 })).toBeNull();
     expect(parseJobEvent('')).toBeNull();
     expect(parseJobEvent('[DONE]')).toBeNull();
+  });
+});
+
+describe('shouldAttemptReconnect', () => {
+  it('para em estado terminal ou fechado', () => {
+    expect(
+      shouldAttemptReconnect({ closed: false, terminalReached: true, attempt: 0, maxAttempts: 5 }),
+    ).toBe('stop');
+    expect(
+      shouldAttemptReconnect({ closed: true, terminalReached: false, attempt: 0, maxAttempts: 5 }),
+    ).toBe('stop');
+  });
+
+  it('cai no fallback ao esgotar tentativas', () => {
+    expect(
+      shouldAttemptReconnect({ closed: false, terminalReached: false, attempt: 4, maxAttempts: 5 }),
+    ).toBe('fallback');
+    expect(
+      shouldAttemptReconnect({ closed: false, terminalReached: false, attempt: 1, maxAttempts: 5 }),
+    ).toBe('retry');
   });
 });
 

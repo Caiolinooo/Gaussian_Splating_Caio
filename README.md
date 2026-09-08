@@ -1,5 +1,7 @@
 # Gaussian Splatting Studio
 
+Versão **0.1.0** — changelog em [`CHANGELOG.md`](./CHANGELOG.md).
+
 Plataforma **100% zero-CLI** que transforma **vídeos ou conjuntos de imagens** em **cenas 3D Gaussian Splatting** interativas, editáveis e calibradas em **unidades reais** (m/cm/mm e ft/in). App desktop (Tauri) + UI web (React) + API local (FastAPI) + pipeline GPU (Python/WSL2).
 
 > A fonte de verdade de alto nível — visão, arquitetura, plano faseado, stack e decisões — é o **[`tasks.md`](./tasks.md)**.
@@ -77,7 +79,41 @@ pnpm dev:web
 
 A URL da API pode ser alterada via `VITE_API_URL` (ver `apps/web/.env.example`).
 
-### 5. App desktop (opcional — requer Rust)
+Auth de desenvolvimento (sem Supabase): `DEV_AUTH_BYPASS=1` na API e `VITE_DEV_AUTH_BYPASS=1` na web.
+
+### 5. Avaliação em um único entry (porta 2222)
+
+Sobe **só UI + API** (sem CUDA, COLMAP, gsplat ou treino GPU). A FastAPI serve o build Vite quando `SERVE_WEB_DIR` aponta para `apps/web/dist`.
+
+```powershell
+pnpm install
+pnpm --filter @gs/web build
+# no build, defina a URL pública da API (mesmo host/porta se for entry único):
+# $env:VITE_API_URL = "http://SEU-HOST:2222"
+# $env:VITE_DEV_AUTH_BYPASS = "1"
+
+$env:DEV_AUTH_BYPASS = "1"
+$env:CORS_ORIGINS = "http://localhost:2222,http://SEU-HOST:2222"
+$env:SERVE_WEB_DIR = (Resolve-Path .\apps\web\dist).Path
+.\.venv\Scripts\python -m uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port 2222
+```
+
+Linux (avaliação remota):
+
+```bash
+export VITE_API_URL="http://vm.groupabz.com:2222"
+export VITE_DEV_AUTH_BYPASS=1
+pnpm --filter @gs/web build
+
+export DEV_AUTH_BYPASS=1
+export CORS_ORIGINS="http://vm.groupabz.com:2222,http://localhost:2222"
+export SERVE_WEB_DIR="$PWD/apps/web/dist"
+.venv/bin/python -m uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port 2222
+```
+
+A UI fica em `http://<host>:2222`. `/health` continua na mesma porta. **Não** instala toolchain de GPU neste modo.
+
+### 6. App desktop (opcional — requer Rust)
 
 ```powershell
 pnpm dev:desktop   # = tauri dev, apontando para http://localhost:5173
@@ -105,7 +141,7 @@ Hooks de commit: `pip install pre-commit && pre-commit install`.
 
 ## Convenções
 
-- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/pt-br/) (`feat:`, `fix:`, `chore:`, `ci:`, `docs:`…), atômicos e descritivos, sempre locais até definirmos o remote.
-- **Versionamento**: semântico, por pacote (`apps/*`, `packages/*`, `pipeline/` têm versões próprias).
+- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/pt-br/) (`feat:`, `fix:`, `chore:`, `ci:`, `docs:`…).
+- **Versionamento**: semântico (`0.1.0` no monorepo; `apps/*`, `packages/*`, `pipeline/` acompanham). Remote: `https://github.com/Caiolinooo/Gaussian_Splating_Caio` (`main`).
 - **`tasks.md`** é a fonte de verdade de alto nível: atualizado a cada fase concluída.
 - Código/identificadores em inglês; copy de UI e mensagens ao usuário em pt-BR.

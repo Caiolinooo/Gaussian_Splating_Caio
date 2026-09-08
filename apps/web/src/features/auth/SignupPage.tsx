@@ -47,7 +47,8 @@ export function SignupPage({ onAuthenticated, onNavigate }: AuthPageProps) {
           <label htmlFor="auth-signup-email">E-mail</label>
           <input
             id="auth-signup-email"
-            type="email"
+            type="text"
+            inputMode="email"
             autoComplete="email"
             value={email}
             onChange={(event) => {

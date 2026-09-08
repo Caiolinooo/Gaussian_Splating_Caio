@@ -81,6 +81,13 @@ export class ViewerApiError extends Error {
   }
 }
 
+export const MISSING_SPLAT_USER_MESSAGE =
+  'Não encontramos o splat deste job. Ele pode não existir, ainda estar processando ou ter falhado no pipeline.';
+
+export function isMissingSplatArtifact(error: unknown): boolean {
+  return error instanceof ViewerApiError && error.status === 404;
+}
+
 export interface FetchArtifactOptions {
   onProgress?: (ratio: number) => void;
   signal?: AbortSignal;
@@ -212,7 +219,7 @@ export async function fetchJobArtifact(
   }
 
   if (response.status === 404) {
-    throw new ViewerApiError(`Artefato ${kind} não encontrado para o job.`, path, 404);
+    throw new ViewerApiError(MISSING_SPLAT_USER_MESSAGE, path, 404);
   }
   if (!response.ok) {
     const detail = await readErrorDetail(

@@ -113,6 +113,13 @@ export function estimateEtaSeconds(elapsedMs: number, overallProgress: number): 
   return Math.round(remaining / 1000);
 }
 
+export function remainingEtaLabel(state: JobState, seconds: number | null): string | null {
+  if (isTerminalState(state)) {
+    return null;
+  }
+  return formatEta(seconds);
+}
+
 export function formatEta(seconds: number | null): string {
   if (seconds === null) {
     return 'Calculando…';

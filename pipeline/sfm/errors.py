@@ -25,6 +25,12 @@ NO_RECONSTRUCTION_USER = (
     "Grave de novo com mais textura, sobreposição e iluminação estável."
 )
 
+COLMAP_MISSING_USER = (
+    "O COLMAP não está instalado ou não foi encontrado neste ambiente. "
+    "Abra Configuração do ambiente (Setup) e conclua a instalação do COLMAP "
+    "antes de enviar outro processamento."
+)
+
 
 def few_matches(detail: str) -> SfmError:
     return SfmError(detail, user_message=FEW_MATCHES_USER, code="FEW_MATCHES")
@@ -53,5 +59,13 @@ def colmap_failed(step: str, stderr: str) -> SfmError:
             f"A etapa COLMAP ({step}) falhou. "
             "Confira o log técnico ou tente gravar novamente com mais textura/luz."
         ),
+        code="COLMAP_FAILED",
+    )
+
+
+def colmap_missing(binary: str) -> SfmError:
+    return SfmError(
+        f"colmap binary not found: {binary}",
+        user_message=COLMAP_MISSING_USER,
         code="COLMAP_FAILED",
     )

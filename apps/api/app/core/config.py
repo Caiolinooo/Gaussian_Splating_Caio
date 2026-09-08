@@ -3,16 +3,18 @@
 Recognised env vars: ``DATA_ROOT``, ``SUPABASE_JWT_SECRET``, ``SUPABASE_URL``,
 ``SUPABASE_JWKS_URL``, ``DEV_AUTH_BYPASS``, ``PIPELINE_PATH``, ``MAX_UPLOAD_MB``,
 ``MAX_VIDEO_DURATION_S``, ``MIN_IMAGES``, ``TOOL_FFMPEG``, ``TOOL_FFPROBE``,
-``TOOL_COLMAP``, ``TOOL_PYTHON``, ``TOOL_SIMPLE_TRAINER``, ``TOOL_SPLAT_TRANSFORM``.
+``TOOL_COLMAP``, ``TOOL_PYTHON``, ``TOOL_SIMPLE_TRAINER``, ``TOOL_SPLAT_TRANSFORM``,
+``CORS_ORIGINS``, ``SERVE_WEB_DIR``.
 """
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 
 try:
     from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,6 +30,15 @@ except ImportError:  # documented fallback — no extra package required for tes
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:2222",
+    "http://127.0.0.1:2222",
+    "tauri://localhost",
+    "http://tauri.localhost",
+)
+
 
 def _as_bool(raw: str) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
@@ -35,6 +46,33 @@ def _as_bool(raw: str) -> bool:
 
 def _as_path(raw: str) -> Path:
     return Path(raw)
+
+
+def parse_cors_origins(value: object) -> list[str]:
+    """Accept a JSON list, comma-separated hosts, or ``*``."""
+    if value is None:
+        return list(DEFAULT_CORS_ORIGINS)
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value).strip()
+    if not text:
+        return list(DEFAULT_CORS_ORIGINS)
+    if text.startswith("["):
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()]
+        return list(DEFAULT_CORS_ORIGINS)
+    return [part.strip() for part in text.split(",") if part.strip()]
+
+
+CorsOrigins = Annotated[list[str], BeforeValidator(parse_cors_origins)]
+
+
+def _optional_path(raw: str) -> Path | None:
+    text = raw.strip()
+    if not text:
+        return None
+    return Path(text)
 
 
 def _read_env() -> dict[str, Any]:
@@ -56,6 +94,8 @@ def _read_env() -> dict[str, Any]:
         "TOOL_PYTHON": ("tool_python", str),
         "TOOL_SIMPLE_TRAINER": ("tool_simple_trainer", str),
         "TOOL_SPLAT_TRANSFORM": ("tool_splat_transform", str),
+        "CORS_ORIGINS": ("cors_origins", parse_cors_origins),
+        "SERVE_WEB_DIR": ("serve_web_dir", _optional_path),
     }
     values: dict[str, Any] = {}
     for env_name, (field_name, conv) in mapping.items():
@@ -77,14 +117,8 @@ class Settings(BaseSettings):
 
     app_name: str = "Gaussian Splatting — API local"
     version: str = "0.1.0"
-    cors_origins: list[str] = Field(
-        default_factory=lambda: [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "tauri://localhost",
-            "http://tauri.localhost",
-        ]
-    )
+    cors_origins: CorsOrigins = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
+    serve_web_dir: Path | None = None
     data_root: Path = Path("data")
     supabase_jwt_secret: str = ""
     supabase_url: str = ""
@@ -110,6 +144,14 @@ class Settings(BaseSettings):
         if raw.is_absolute():
             return raw.resolve()
         return (_API_ROOT / raw).resolve()
+
+    def resolved_serve_web_dir(self) -> Path | None:
+        raw = self.serve_web_dir
+        if raw is None:
+            return None
+        path = raw if raw.is_absolute() else Path.cwd() / raw
+        resolved = path.resolve()
+        return resolved if resolved.is_dir() else None
 
     def max_upload_bytes(self) -> int:
         return int(self.max_upload_mb) * 1024 * 1024

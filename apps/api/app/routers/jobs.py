@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.core.auth import CurrentUser, authenticate_websocket, get_current_user
 from app.core.errors import forbidden, not_found, unprocessable
@@ -48,6 +50,21 @@ def _load_owned(runtime: JobRuntime, job_id: str, user: CurrentUser) -> object:
         raise not_found("Job não encontrado.", "JOB_NOT_FOUND") from exc
     _require_owner(record, user)
     return record
+
+
+def _sse_frame(payload: ProgressPayload) -> str:
+    return f"data: {json.dumps(payload.model_dump(), ensure_ascii=False)}\n\n"
+
+
+async def _iter_progress(runtime: JobRuntime, job_id: str, record: object) -> AsyncIterator[ProgressPayload]:
+    snapshot: ProgressPayload = runtime.hub.latest(job_id) or snapshot_payload(record)
+    yield snapshot
+    if snapshot.state in TERMINAL_STATES:
+        return
+    async for event in runtime.hub.subscribe(job_id):
+        yield event
+        if event.state in TERMINAL_STATES:
+            return
 
 
 @router.post("", status_code=202, response_model=JobAccepted)
@@ -185,17 +202,33 @@ async def job_events(websocket: WebSocket, job_id: str) -> None:
         await websocket.close(code=4403)
         return
 
-    snapshot: ProgressPayload = runtime.hub.latest(job_id) or snapshot_payload(record)
-    await websocket.send_json(snapshot.model_dump())
-    if snapshot.state in TERMINAL_STATES:
-        await websocket.close(code=1000)
-        return
-
     try:
-        async for event in runtime.hub.subscribe(job_id):
-            await websocket.send_json(event.model_dump())
-            if event.state in TERMINAL_STATES:
-                break
+        async for payload in _iter_progress(runtime, job_id, record):
+            await websocket.send_json(payload.model_dump())
     except WebSocketDisconnect:
         return
     await websocket.close(code=1000)
+
+
+@router.get("/{job_id}/events")
+async def job_events_sse(
+    job_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    runtime: JobRuntime = Depends(get_runtime),
+) -> StreamingResponse:
+    record = _load_owned(runtime, job_id, user)
+
+    async def generate() -> AsyncIterator[str]:
+        async for payload in _iter_progress(runtime, job_id, record):
+            yield _sse_frame(payload)
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

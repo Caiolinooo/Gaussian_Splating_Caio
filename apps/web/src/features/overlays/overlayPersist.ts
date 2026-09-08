@@ -1,5 +1,6 @@
 import {
   parseOverlayDocument,
+  type BlendMode,
   type Overlay,
   type OverlayDocument,
   type OverlayKind,
@@ -22,6 +23,19 @@ export function overlayKindLabelPt(kind: OverlayKind): string {
       return 'Adesivo';
     default:
       return assertNever(kind);
+  }
+}
+
+export function blendModeLabelPt(mode: BlendMode): string {
+  switch (mode) {
+    case 'normal':
+      return 'Normal';
+    case 'multiply':
+      return 'Multiplicar';
+    case 'overlay':
+      return 'Sobrepor';
+    default:
+      return assertNever(mode);
   }
 }
 

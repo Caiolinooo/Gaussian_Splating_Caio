@@ -1,8 +1,8 @@
 # Tasks — Plataforma de Gaussian Splatting a partir de Vídeo
 
 > Plano de ação de alto nível. Documento vivo: atualizar a cada fase concluída.
-> Última revisão: 2026-09-04 (4ª revisão — **consolidação**: código dos agentes paralelos integrado na `master` local — pipeline ingest/SfM/treino/export/jobs + autocal + meshproxy, `@gs/viewer` + `@gs/overlays`, API jobs/auth/cenas, rotas web autenticadas; contratos de calibração/overlays/unidades/WS/erros alinhados; verificado por testes de código. **Não marcado**: GPU real, COLMAP/gsplat/Open3D/MediaPipe instalados, viewer rodando, E2E Playwright, sidecar Tauri).
-> Revisão anterior: 2026-09-04 (3ª revisão — **Fase 0 executada**: monorepo consolidado na raiz, Provisioner com detecções reais + API FastAPI + UI de Setup verificados de verdade, núcleo de unidades testado, shell Tauri v2 scaffoldado, qualidade/CI configurados; instalações automatizadas do Provisioner seguem como stubs documentados — ver checklist da Fase 0 em §5).
+> Última revisão: 2026-09-08 (6ª revisão — **bugs de UI/workflow da auditoria**: WS terminal sem “Reconectando…”, SSE `GET /jobs/{id}/events`, COLMAP ausente → `COLMAP_FAILED`, timeline `applyEvent`, ETA terminal, `dev@localhost` no bypass, nav persistente, `<title>` por rota, viewer sem artefato + CTA, overlays em pt-BR. **Ainda não marcado**: GPU/COLMAP/gsplat reais, E2E Playwright no CI, sidecar Tauri).
+> Revisão anterior: 2026-09-08 (5ª revisão — **auditoria UI/workflow local, sem GPU**: typecheck/lint/Vitest/pytest verdes; API+web subidos com bypass de auth; fluxo `/` `/setup` `/login` `/jobs` `/upload` `/jobs/:id` `/viewer` exercitado no Edge. Job sintético de 20 imagens falhou no SfM sem disparar treino).
 
 ---
 
@@ -21,7 +21,7 @@ Aplicação end-to-end, **100% zero-CLI**, que transforma **vídeos ou conjuntos
 
 ## 2. Estado atual do projeto (levantamento em 2026-09-04)
 
-- Workspace: `D:\Projeto\Desenvolvendo\Gaussian_Splating_Caio` (branch `master` local, **sem remote**).
+- Workspace: `D:\Projeto\Desenvolvendo\Gaussian_Splating_Caio` (branch `main`, remote `https://github.com/Caiolinooo/Gaussian_Splating_Caio`).
 - **Fase 0** no git: monorepo pnpm, UI de Setup, API `/setup/*`, Tauri scaffold, `@gs/units`, Provisioner, CI.
 - **Consolidação (2026-09-04, 4ª revisão)**: working tree dos 6 agentes foi integrado — `pipeline/{ingest,sfm,train,export,jobs,autocal,meshproxy}`, `packages/{viewer,overlays}`, `apps/web` com rotas `/login|/signup|/reset|/setup|/jobs|/upload|/viewer|/editing|/calibration|/overlays` + `AuthGuard`, API jobs/cenas/auth. Contratos: `CalibrationJson` ↔ autocal camelCase; `OverlayJson` = `@gs/overlays`; `UnitsPort` via `unitsBinding.ts`; WS `?token=` (+ compat `access_token`); erros FastAPI `{detail:{message,code}}`; `DELETE /jobs/{id}`.
 - **Verificação desta revisão** (sem GPU/toolchains pesados): `pnpm -r build/typecheck/test/lint` verdes; `ruff check .` limpo; `pytest pipeline` 112 passed + 1 skipped; `pytest apps/api` 35 passed. **Não** coletar `pytest pipeline apps/api` no mesmo processo (dois pacotes `tests`).

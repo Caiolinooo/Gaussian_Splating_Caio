@@ -8,7 +8,7 @@ import pytest
 
 from jobs.errors import InvalidTransition, JobInterrupted
 from jobs.handlers import StageHandlers, StageOutcome
-from jobs.machine import JobMachine, apply_transition, resume_stage
+from jobs.machine import JobMachine, apply_transition, classify_stage_error, resume_stage
 from jobs.models import JobSpec, new_job_record
 from jobs.states import STAGE_ORDER, JobState, SourceKind, StageStatus, can_transition
 from jobs.store import JsonJobStore, SqliteJobStore, record_from_dict, record_to_dict
@@ -163,6 +163,38 @@ def test_resume_after_simulated_kill_skips_completed_sfm(tmp_path: Path) -> None
     assert calls["extracting"] == 1
     assert calls["sfm"] == 1
     assert calls["training"] == 2
+
+
+def test_sfm_file_not_found_maps_to_colmap_failed(tmp_path: Path) -> None:
+    def sfm(_record: object, _progress: object) -> StageOutcome:
+        raise FileNotFoundError(2, "The system cannot find the file specified", "colmap")
+
+    handlers = StageHandlers(
+        extract=_ok("extracting"),  # type: ignore[arg-type]
+        sfm=sfm,
+        training=_ok("training"),  # type: ignore[arg-type]
+        exporting=_ok("exporting"),  # type: ignore[arg-type]
+        meshproxy=_ok("meshproxy"),  # type: ignore[arg-type]
+        autocal=_ok("autocal"),  # type: ignore[arg-type]
+    )
+    store = JsonJobStore(tmp_path / "store")
+    machine = JobMachine(store, handlers=handlers)
+    record = machine.create(_spec(tmp_path, key=None))
+    failed = machine.run(record.job_id)
+    assert failed.state is JobState.ERROR
+    assert failed.error_code == "COLMAP_FAILED"
+    assert "Setup" in (failed.error_message or "")
+    assert failed.stages["sfm"].status is StageStatus.FAILED
+    assert failed.stages["extracting"].status is StageStatus.DONE
+
+
+def test_classify_stage_error_preserves_coded_exceptions() -> None:
+    exc = RuntimeError("boom")
+    exc.user_message = "Falha no treino GPU."  # type: ignore[attr-defined]
+    exc.code = "TRAINER_FAILED"  # type: ignore[attr-defined]
+    code, message = classify_stage_error("training", exc)
+    assert code == "TRAINER_FAILED"
+    assert message == "Falha no treino GPU."
 
 
 def test_error_then_retry_from_failed_stage(tmp_path: Path) -> None:

@@ -14,6 +14,7 @@ import {
   type EventTransport,
   type JobEvent,
 } from '../../lib/events';
+import { applyJobEvent } from './applyEvent';
 import { isTerminalState } from './stages';
 
 const MAX_LOG_LINES = 500;
@@ -118,35 +119,17 @@ export const useJobsStore = create<JobsStore>((set, get) => ({
   applyEvent: (event) => {
     const current = get().current;
     const logs = event.message ? [...get().logs, event.message].slice(-MAX_LOG_LINES) : get().logs;
-    const stages = { ...(current?.stages ?? {}) };
-    if (event.stage && event.stage !== 'upload') {
-      const previous = stages[event.stage];
-      stages[event.stage] = {
-        status: event.state === 'error' && previous?.status !== 'done' ? 'failed' : 'running',
-        progress: event.stage_progress,
-        message: event.message || previous?.message,
-      };
-      if (event.state === 'done') {
-        stages[event.stage] = { ...stages[event.stage]!, status: 'done', progress: 1 };
-      }
-    }
     set({
       events: [...get().events, event].slice(-MAX_LOG_LINES),
       logs,
       lastEventAt: Date.now(),
-      current: current
-        ? {
-            ...current,
-            state: event.state,
-            stages,
-            eta_seconds: event.metrics.eta_seconds ?? current.eta_seconds,
-            error_message:
-              event.state === 'error'
-                ? event.message || current.error_message
-                : current.error_message,
-          }
-        : current,
+      current: applyJobEvent(current, event),
     });
+    if (isTerminalState(event.state) && unsubscribeEvents) {
+      unsubscribeEvents();
+      unsubscribeEvents = null;
+      set({ connection: 'closed' });
+    }
   },
 
   subscribe: (jobId) => {
@@ -163,12 +146,35 @@ export const useJobsStore = create<JobsStore>((set, get) => ({
     });
     unsubscribeEvents = subscribeJobEvents(jobId, {
       onEvent: (event) => get().applyEvent(event),
-      onState: (connection, transport) => set({ connection, transport }),
+      onState: (connection, transport) => {
+        const current = get().current;
+        if (current?.job_id === jobId && isTerminalState(current.state)) {
+          set({ connection: 'closed', transport });
+          return;
+        }
+        set({ connection, transport });
+      },
       onFallbackPoll: () => {
         void get().fetchDetail(jobId);
       },
+      shouldStopReconnect: () => {
+        const current = get().current;
+        return current?.job_id === jobId ? isTerminalState(current.state) : false;
+      },
     });
-    void get().fetchDetail(jobId);
+    void get().fetchDetail(jobId).then(() => {
+      const current = get().current;
+      if (get().subscribedJobId !== jobId) {
+        return;
+      }
+      if (current && isTerminalState(current.state)) {
+        if (unsubscribeEvents) {
+          unsubscribeEvents();
+          unsubscribeEvents = null;
+        }
+        set({ connection: 'closed', transport: null });
+      }
+    });
   },
 
   unsubscribe: () => {

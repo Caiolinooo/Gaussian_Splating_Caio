@@ -24,7 +24,9 @@ import {
   extractCalibrationExtras,
   fetchJobArtifact,
   fetchScene,
+  isMissingSplatArtifact,
   mergeCalibrationForApi,
+  MISSING_SPLAT_USER_MESSAGE,
   putScene,
   type CalibrationExtras,
   type SceneApiDocument,
@@ -168,6 +170,7 @@ export class ViewerController {
     const store = useViewerStore.getState();
     store.setIds({ jobId: options.jobId ?? null, sceneId: options.sceneId ?? null });
     store.setLoad('scene', 0, 'Abrindo a cena…');
+    useCalibrationStore.getState().setGatePhase('hidden');
 
     if (options.initialTool === 'tape') {
       useTapeStore.getState().toggleActive(true);
@@ -206,7 +209,12 @@ export class ViewerController {
         useCalibrationStore.getState().setGatePhase('blocked');
       }
     } catch (error) {
-      store.setError(error instanceof Error ? error.message : 'Falha ao carregar a cena.');
+      useCalibrationStore.getState().setGatePhase('hidden');
+      if (isMissingSplatArtifact(error)) {
+        store.setError(MISSING_SPLAT_USER_MESSAGE);
+      } else {
+        store.setError(error instanceof Error ? error.message : 'Falha ao carregar a cena.');
+      }
     }
 
     this.startLoop();
