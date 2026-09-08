@@ -1,17 +1,18 @@
 # Gaussian Splatting Studio
 
-Versão **0.1.0** — changelog em [`CHANGELOG.md`](./CHANGELOG.md).
+Versão **0.2.0** — changelog em [`CHANGELOG.md`](./CHANGELOG.md).
 
 Plataforma **100% zero-CLI** que transforma **vídeos ou conjuntos de imagens** em **cenas 3D Gaussian Splatting** interativas, editáveis e calibradas em **unidades reais** (m/cm/mm e ft/in). App desktop (Tauri) + UI web (React) + API local (FastAPI) + pipeline GPU (Python/WSL2).
 
 > A fonte de verdade de alto nível — visão, arquitetura, plano faseado, stack e decisões — é o **[`tasks.md`](./tasks.md)**.
 
-## Status atual: consolidação (Fase 0 + wiring Fase 1–5 em código)
+## Status atual: 0.2.0 — pipeline no servidor GPU (L4)
 
-Implementado e **verificado por testes de código** nesta máquina (sem GPU/COLMAP/Open3D/MediaPipe/Rust):
+App de avaliação: **http://vm.groupabz.com:2222** (UI+API, `DEV_AUTH_BYPASS`).
 
 - Monorepo pnpm com `apps/web`, `apps/api`, `apps/desktop`, `packages/{units,viewer,overlays}`, `pipeline/`, `installer/`, `docs/`.
-- **Provisioner** (`pipeline/provisioner`): detecções reais de ambiente (GPU NVIDIA/driver/CUDA via `nvidia-smi`, WSL2 via `wsl --status`, disco, RAM, FFmpeg, COLMAP, Python) + verificações pós-instalação leves. As **instalações automatizadas são stubs documentados** (URLs oficiais em `pipeline/provisioner/install.py`).
+- **Provisioner** (`pipeline/provisioner`): detecção real + instalação de FFmpeg/PyTorch+CUDA/gsplat no Linux com GPU. **COLMAP não é compilado nem instalado via apt** — o app localiza o binário do usuário (`which colmap` ou `~/colmap/build/src/colmap/exe/colmap`).
+- **Defaults L4 24GB / 50GB RAM**: ingestão 150–400 frames, `sequential_matcher` em vídeo (e em >80 imagens), treino `data_factor=4`, SH 2, 7000 steps (~20GB VRAM).
 - **Pipeline** (código + testes unitários): ingestão vídeo/imagens, comandos SfM/treino/export, job machine retomável (`extracting→sfm→training→exporting→meshproxy→autocal`), auto-calibração por altura com fallback se pose/depth faltar, meshproxy SKIPPED sem Open3D.
 - **API local** (FastAPI): Setup + jobs (upload, progresso WS, artefatos, `DELETE /jobs/{id}`), cenas, JWT Supabase (HS256) com isolamento por usuário. WS aceita `?token=` e `?access_token=`.
 - **UI web**: Setup em `/setup`; auth `/login|/signup|/reset`; jobs `/jobs|/upload|/jobs/:id`; viewer/edição/calibração/overlays atrás de `AuthGuard`. Home `/` → `/jobs`.

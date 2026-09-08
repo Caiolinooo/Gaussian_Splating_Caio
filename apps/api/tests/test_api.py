@@ -8,7 +8,17 @@ from app.main import app
 
 client = TestClient(app)
 
-EXPECTED_COMPONENTS = {"gpu", "wsl2", "disk", "memory", "ffmpeg", "colmap", "python"}
+EXPECTED_COMPONENTS = {
+    "gpu",
+    "wsl2",
+    "disk",
+    "memory",
+    "ffmpeg",
+    "colmap",
+    "python",
+    "pytorch",
+    "gsplat",
+}
 
 
 def test_health_ok() -> None:
@@ -45,8 +55,10 @@ def test_install_flow_and_progress() -> None:
     assert progress["percent"] == 100
     statuses = {step["key"]: step["status"] for step in progress["steps"]}
     assert statuses["detect"] == "done"
-    assert statuses["ffmpeg"] == "skipped"  # stub da Fase 0
-    assert statuses["gsplat"] == "skipped"  # stub da Fase 0
+    assert statuses["ffmpeg"] in {"done", "skipped"}
+    assert statuses["colmap"] in {"done", "skipped"}
+    assert statuses["gsplat"] in {"done", "skipped", "error"}
+    assert "sudo -n apt-get install -y colmap" not in "\n".join(progress["log"]).lower()
     assert progress["log"]
 
 

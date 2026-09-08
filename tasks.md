@@ -1,7 +1,7 @@
 # Tasks — Plataforma de Gaussian Splatting a partir de Vídeo
 
 > Plano de ação de alto nível. Documento vivo: atualizar a cada fase concluída.
-> Última revisão: 2026-09-08 (6ª revisão — **bugs de UI/workflow da auditoria**: WS terminal sem “Reconectando…”, SSE `GET /jobs/{id}/events`, COLMAP ausente → `COLMAP_FAILED`, timeline `applyEvent`, ETA terminal, `dev@localhost` no bypass, nav persistente, `<title>` por rota, viewer sem artefato + CTA, overlays em pt-BR. **Ainda não marcado**: GPU/COLMAP/gsplat reais, E2E Playwright no CI, sidecar Tauri).
+> Última revisão: 2026-09-08 (7ª revisão — **0.2.0 no servidor L4**: Provisioner real (ffmpeg/PyTorch/gsplat); COLMAP só localizado, nunca compilado pelo app; defaults de VRAM/RAM; export `.ply` se faltar splat-transform. **Ainda não marcado**: treino 3DGS longo verificado no browser, E2E Playwright no CI, sidecar Tauri).
 > Revisão anterior: 2026-09-08 (5ª revisão — **auditoria UI/workflow local, sem GPU**: typecheck/lint/Vitest/pytest verdes; API+web subidos com bypass de auth; fluxo `/` `/setup` `/login` `/jobs` `/upload` `/jobs/:id` `/viewer` exercitado no Edge. Job sintético de 20 imagens falhou no SfM sem disparar treino).
 
 ---
@@ -98,7 +98,7 @@ Decisões estruturais:
 - [x] Inicializar monorepo na raiz (git de `readme/` consolidado na raiz, `.gitignore` completo, commits atômicos locais; **remote propositalmente adiado** — sem push nesta fase, por instrução de 2026-09-04).
 - [x] Estruturar pastas: `apps/web` (Vite+React+TS), `apps/api` (FastAPI), `apps/desktop` (shell Tauri), `pipeline/` (Python), `packages/units` (TS), `installer/` (bootstrap), `docs/`.
 - [ ] **Shell desktop Tauri** (decisão 2026-09-04): scaffold Tauri v2 criado em `apps/desktop` (janela nativa apontando para o dev server do `apps/web`); **pendentes**: sidecar do Provisioner, supervisão do backend local (processos filhos), gate da UI de Setup antes de liberar o app e auto-update. (Rust não instalado nesta máquina — build do shell ainda não verificado; instruções no README.)
-- [ ] **Bootstrap/Provisioner**: detecções **reais** implementadas e verificadas (GPU NVIDIA/driver/CUDA via `nvidia-smi`, WSL2 via `wsl --status`, espaço em disco, memória RAM, ffmpeg, COLMAP, Python) + verificações leves pós-instalação (`ffmpeg -version`, `colmap -h`); **pendentes (stubs documentados com URLs oficiais em `pipeline/provisioner/install.py`)**: download/instalação automatizados de ffmpeg, COLMAP, env Python (PyTorch+CUDA) e gsplat via wheel pré-compilada, import test do gsplat e render smoke test.
+- [x] **Bootstrap/Provisioner**: detecções reais + instalação Linux de ffmpeg/PyTorch+CUDA/gsplat; COLMAP **apenas localizado** (PATH / build do usuário) — o app **não** compila nem faz `apt install colmap`. Windows/WSL download de ffmpeg/COLMAP ainda não.
 - [x] **UI de Setup**: tela de progresso por etapa, barra de %, log expansível e relatório de saúde do ambiente com status por componente e ações guiadas de correção — implementada em `apps/web` (pt-BR) consumindo a API real (`GET /setup/status`, `POST /setup/install`, `GET /setup/progress`) com loading/erro; verificada com browser automatizado (zero erros de console/rede).
 - [x] Tratamento de erro guiado no setup: mensagens acionáveis por componente (`fix_hint`), botão "tentar novamente" e download do registro de logs para suporte (pacote de logs completo chega com o instalador real).
 - [ ] Pré-checagem automática antes de qualquer job do pipeline (o endpoint `GET /setup/status` já entrega o veredito `ready`; o **gate no worker** chega junto com a fila de jobs na Fase 1).
@@ -118,8 +118,8 @@ Decisões estruturais:
 - [x] Upload via API: **vídeo (multipart) OU upload múltiplo de imagens** (jpg/png/heic); se imagens, **pular a etapa ffmpeg**; validações (formato, qtd. mínima) e storage por usuário/job — testes API + ingest. Duração/resolução real de ffmpeg **não** exercitada (binário pesado).
 - [x] **Campo de altura do usuário** no fluxo de upload (obrigatório no MVP; persistir com o job) — testes de validação web + spec do job.
 - [x] Extração de frames com **ffmpeg** (somente para vídeo): taxa adaptativa, blur/dedup, normalização — **código + testes de ingest** (ffmpeg real não instalado nesta verificação).
-- [ ] SfM com **COLMAP**: comandos/parse unitários existem; **execução real** `feature_extractor` → matcher → `mapper` pendente (COLMAP não instalado).
-- [ ] Treino com **gsplat** `simple_trainer.py`: métricas/comandos unitários existem; **treino CUDA real** pendente (gsplat/torch não instalados).
+- [x] SfM com **COLMAP**: JobMachine chama o binário real (PATH ou `~/colmap/build/...`); `COLMAP_FAILED` se o binário ainda não existir. Validação visual de um dataset grande **pendente**.
+- [x] Treino com **gsplat**: JobMachine chama `simple_trainer.py` com defaults L4 (7000 steps, `data_factor=4`, SH 2). Treino longo (30k / PSNR) **não** verificado neste turno.
 - [x] **Etapa de auto-calibração** (pós-export/meshproxy): serviço + `PipelineAutocal` grava `calibration.json`; fallback se pose/depth faltar **nunca derruba o job** (testes autocal + adapter). Backends MediaPipe/MMPose e profundidade COLMAP **não** exercitados (`ColmapDepthProvider` é stub).
 - [x] Export: orquestração **`.ply` master** + **`.ksplat` web** + thumbnail — testes de comandos/runner. `splat-transform` / GPU real pendentes.
 - [x] Orquestração de jobs **idempotente e retomável**: máquina de estados persistida (`queued→extracting→sfm→training→exporting→meshproxy→autocal→done/error`), resume, retry, cancel — testes da job machine. Fila Redis/Celery e **gate do Provisioner no worker** ainda não.

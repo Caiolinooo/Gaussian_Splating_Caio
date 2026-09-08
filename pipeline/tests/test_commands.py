@@ -90,6 +90,17 @@ def test_colmap_images_use_exhaustive_matcher() -> None:
     assert "--SiftMatching.use_gpu" in exh
 
 
+def test_colmap_large_image_set_uses_sequential(tmp_path) -> None:
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    for index in range(90):
+        (image_dir / f"img_{index:03d}.jpg").write_bytes(b"x")
+    cfg = ColmapConfig(matcher="auto", max_exhaustive_images=80)
+    paths = ColmapPaths(image_dir=image_dir, work_dir=tmp_path / "colmap")
+    commands = build_sfm_pipeline_commands(cfg, paths, source_kind="images")
+    assert commands[1][1] == "sequential_matcher"
+
+
 def test_gsplat_simple_trainer_command() -> None:
     cfg = TrainConfig(
         python_bin="python",

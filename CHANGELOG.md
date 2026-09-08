@@ -5,6 +5,26 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [0.2.0] - 2026-09-08
+
+Pipeline real no servidor GPU (L4 24GB): Provisioner instala ffmpeg/PyTorch/gsplat; COLMAP só é localizado (nunca compilado pelo app).
+
+### Adicionado
+
+- Resolução automática do COLMAP do usuário (`PATH`, `TOOL_COLMAP`, `~/colmap/build/src/colmap/exe/colmap`).
+- Instalação real de FFmpeg (apt) e PyTorch+CUDA / gsplat no Linux com GPU.
+- Defaults L4: `data_factor=4`, SH degree 2, 7000 steps, `sequential_matcher` em vídeo e em conjuntos >80 imagens.
+- Export continua com `.ply` se `splat-transform` estiver ausente; viewer já faz fallback para `.ply`.
+- Env knobs: `TRAIN_MAX_STEPS`, `TRAIN_DATA_FACTOR`, `TRAIN_SH_DEGREE`, `COLMAP_MAX_EXHAUSTIVE_IMAGES`.
+
+### Corrigido
+
+- Provisioner não tenta `apt`/cmake do COLMAP por cima de uma compilação local.
+
+### Documentação
+
+- README e `tasks.md` alinhados ao caminho feliz no servidor `:2222`.
+
 ## [0.1.0] - 2026-09-08
 
 Primeira entrega usável do monorepo (UI + API + contratos de pipeline). **Não** inclui CUDA, COLMAP, gsplat nem treino GPU.
@@ -31,4 +51,5 @@ Primeira entrega usável do monorepo (UI + API + contratos de pipeline). **Não*
 - README com como rodar web (`5173`), API (`8000`) e avaliação porta `2222`.
 - `tasks.md` atualizado com a auditoria de UI/workflow.
 
+[0.2.0]: https://github.com/Caiolinooo/Gaussian_Splating_Caio/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Caiolinooo/Gaussian_Splating_Caio/releases/tag/v0.1.0

@@ -4,7 +4,9 @@ Recognised env vars: ``DATA_ROOT``, ``SUPABASE_JWT_SECRET``, ``SUPABASE_URL``,
 ``SUPABASE_JWKS_URL``, ``DEV_AUTH_BYPASS``, ``PIPELINE_PATH``, ``MAX_UPLOAD_MB``,
 ``MAX_VIDEO_DURATION_S``, ``MIN_IMAGES``, ``TOOL_FFMPEG``, ``TOOL_FFPROBE``,
 ``TOOL_COLMAP``, ``TOOL_PYTHON``, ``TOOL_SIMPLE_TRAINER``, ``TOOL_SPLAT_TRANSFORM``,
-``CORS_ORIGINS``, ``SERVE_WEB_DIR``.
+``TRAIN_MAX_STEPS``, ``TRAIN_DATA_FACTOR``, ``TRAIN_SH_DEGREE``,
+``COLMAP_MIN_REGISTERED_COUNT``, ``COLMAP_MIN_REGISTERED_RATIO``,
+``COLMAP_MAX_EXHAUSTIVE_IMAGES``, ``CORS_ORIGINS``, ``SERVE_WEB_DIR``.
 """
 
 from __future__ import annotations
@@ -94,6 +96,12 @@ def _read_env() -> dict[str, Any]:
         "TOOL_PYTHON": ("tool_python", str),
         "TOOL_SIMPLE_TRAINER": ("tool_simple_trainer", str),
         "TOOL_SPLAT_TRANSFORM": ("tool_splat_transform", str),
+        "TRAIN_MAX_STEPS": ("train_max_steps", int),
+        "TRAIN_DATA_FACTOR": ("train_data_factor", int),
+        "TRAIN_SH_DEGREE": ("train_sh_degree", int),
+        "COLMAP_MIN_REGISTERED_COUNT": ("colmap_min_registered_count", int),
+        "COLMAP_MIN_REGISTERED_RATIO": ("colmap_min_registered_ratio", float),
+        "COLMAP_MAX_EXHAUSTIVE_IMAGES": ("colmap_max_exhaustive_images", int),
         "CORS_ORIGINS": ("cors_origins", parse_cors_origins),
         "SERVE_WEB_DIR": ("serve_web_dir", _optional_path),
     }
@@ -116,7 +124,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Gaussian Splatting — API local"
-    version: str = "0.1.0"
+    version: str = "0.2.0"
     cors_origins: CorsOrigins = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
     serve_web_dir: Path | None = None
     data_root: Path = Path("data")
@@ -134,6 +142,12 @@ class Settings(BaseSettings):
     tool_python: str = "python"
     tool_simple_trainer: str = "simple_trainer.py"
     tool_splat_transform: str = "splat-transform"
+    train_max_steps: int = 7000
+    train_data_factor: int = 4
+    train_sh_degree: int = 2
+    colmap_min_registered_count: int = 20
+    colmap_min_registered_ratio: float = 0.70
+    colmap_max_exhaustive_images: int = 80
 
     def resolved_data_root(self) -> Path:
         path = self.data_root if self.data_root.is_absolute() else Path.cwd() / self.data_root

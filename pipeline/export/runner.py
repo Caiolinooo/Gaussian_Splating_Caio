@@ -19,6 +19,11 @@ LOGGER = logging.getLogger("pipeline.export")
 ProgressFn = Callable[[float, str], None]
 
 
+def _looks_like_missing_binary(detail: str, binary: str) -> bool:
+    text = f"{detail} {binary}".lower()
+    return any(token in text for token in ("not found", "não encontrado", "cannot find", "no such file"))
+
+
 class CommandResult(Protocol):
     returncode: int
     stdout: str
@@ -79,9 +84,20 @@ def run_export(
     if progress is not None:
         progress(0.4, "Convertendo para .ksplat e limpando floaters…")
     LOGGER.info("event=splat_transform_start argv=%s", " ".join(ksplat_argv))
-    converted = runner.run(ksplat_argv, timeout_s=config.timeout_s)
-    if converted.returncode != 0 or not web.is_file():
-        raise transform_failed(converted.stderr.strip() or converted.stdout.strip() or "ksplat missing")
+    try:
+        converted = runner.run(ksplat_argv, timeout_s=config.timeout_s)
+    except FileNotFoundError:
+        LOGGER.info("event=splat_transform_missing bin=%s", config.splat_transform_bin)
+        converted = None
+    if converted is not None and (converted.returncode != 0 or not web.is_file()):
+        detail = converted.stderr.strip() or converted.stdout.strip() or "ksplat missing"
+        missing = _looks_like_missing_binary(detail, config.splat_transform_bin)
+        if missing:
+            LOGGER.info("event=splat_transform_skipped detail=%s", detail)
+        else:
+            raise transform_failed(detail)
+    elif converted is None:
+        LOGGER.info("event=splat_transform_skipped reason=binary_missing")
 
     thumbnail: Path | None = None
     thumbnail_argv: tuple[str, ...] | None = None
@@ -97,15 +113,18 @@ def run_export(
         thumbnail_argv = tuple(argv)
         if progress is not None:
             progress(0.8, "Gerando miniatura…")
-        shot = runner.run(argv, timeout_s=config.timeout_s)
-        if shot.returncode == 0 and dest.is_file():
+        try:
+            shot = runner.run(argv, timeout_s=config.timeout_s)
+        except FileNotFoundError:
+            LOGGER.info("event=thumbnail_skipped reason=ffmpeg_missing")
+            shot = None
+        if shot is not None and shot.returncode == 0 and dest.is_file():
             thumbnail = dest
-        else:
+        elif dest.is_file():
+            thumbnail = dest
+        elif shot is not None:
             LOGGER.info("event=thumbnail_failed detail=%s", shot.stderr.strip())
-            if dest.is_file():
-                thumbnail = dest
-            else:
-                raise thumbnail_failed(shot.stderr.strip() or "thumbnail missing")
+            raise thumbnail_failed(shot.stderr.strip() or "thumbnail missing")
 
     if progress is not None:
         progress(1.0, "Exportação concluída.")

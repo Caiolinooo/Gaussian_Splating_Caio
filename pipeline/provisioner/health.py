@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import platform
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final
@@ -13,8 +14,10 @@ from provisioner.detect import (
     detect_disk,
     detect_ffmpeg,
     detect_gpu,
+    detect_gsplat,
     detect_memory,
     detect_python,
+    detect_pytorch,
     detect_wsl,
 )
 
@@ -27,10 +30,18 @@ CHECKERS: Final = (
     detect_ffmpeg,
     detect_colmap,
     detect_python,
+    detect_pytorch,
+    detect_gsplat,
 )
 
-#: Componentes sem os quais nem o provisionamento automático deve começar.
-CRITICAL_KEYS: Final = frozenset({"gpu", "wsl2", "disk", "memory"})
+def _critical_keys() -> frozenset[str]:
+    keys = {"gpu", "disk", "memory"}
+    if platform.system() == "Windows":
+        keys.add("wsl2")
+    return frozenset(keys)
+
+
+CRITICAL_KEYS: Final = _critical_keys()
 
 
 @dataclass

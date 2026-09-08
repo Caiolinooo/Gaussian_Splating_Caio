@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 from sfm.config import CameraModel, ColmapConfig, ColmapPaths
+from sfm.parse import count_input_images
 
 
 def _flag(value: bool) -> str:
@@ -105,7 +106,8 @@ def build_sfm_pipeline_commands(
     *,
     source_kind: Literal["video", "images"],
 ) -> list[list[str]]:
-    matcher = config.resolve_matcher(source_kind)
+    image_count = count_input_images(paths.image_dir)
+    matcher = config.resolve_matcher(source_kind, image_count=image_count)
     return [
         build_feature_extractor_command(config, paths),
         build_matcher_command(config, paths, matcher),

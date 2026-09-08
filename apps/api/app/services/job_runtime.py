@@ -67,15 +67,38 @@ class PipelineMachineAdapter:
                 value = getattr(tools, name, None)
                 if value is not None:
                     tool_kwargs[name] = str(value)
-        return self._jobs.JobSpec(
-            user_id=str(spec.user_id),
-            source_kind=self._jobs.SourceKind(kind_value),
-            source_paths=tuple(Path(item) for item in spec.source_paths),
-            user_height_m=float(spec.user_height_m),
-            work_root=Path(spec.work_root),
-            idempotency_key=getattr(spec, "idempotency_key", None),
-            tools=self._jobs.ToolPaths(**tool_kwargs) if tool_kwargs else self._jobs.ToolPaths(),
-        )
+        spec_kwargs: dict[str, Any] = {
+            "user_id": str(spec.user_id),
+            "source_kind": self._jobs.SourceKind(kind_value),
+            "source_paths": tuple(Path(item) for item in spec.source_paths),
+            "user_height_m": float(spec.user_height_m),
+            "work_root": Path(spec.work_root),
+            "idempotency_key": getattr(spec, "idempotency_key", None),
+            "tools": self._jobs.ToolPaths(**tool_kwargs) if tool_kwargs else self._jobs.ToolPaths(),
+        }
+        train = getattr(spec, "train", None)
+        if train is not None and hasattr(self._jobs, "TrainConfig"):
+            spec_kwargs["train"] = self._jobs.TrainConfig(
+                python_bin=tool_kwargs.get("python", "python"),
+                trainer_script=Path(tool_kwargs.get("simple_trainer", "simple_trainer.py")),
+                data_factor=int(getattr(train, "data_factor", 4)),
+                max_steps=int(getattr(train, "max_steps", 7000)),
+                save_steps=tuple(getattr(train, "save_steps", (7000,))),
+                eval_steps=tuple(getattr(train, "eval_steps", (7000,))),
+                ply_steps=tuple(getattr(train, "ply_steps", (7000,))),
+                extra_args=tuple(getattr(train, "extra_args", ())),
+            )
+        colmap = getattr(spec, "colmap", None)
+        if colmap is not None and hasattr(self._jobs, "ColmapConfig"):
+            spec_kwargs["colmap"] = self._jobs.ColmapConfig(
+                colmap_bin=tool_kwargs.get("colmap", "colmap"),
+                matcher=getattr(colmap, "matcher", "auto"),
+                use_gpu=bool(getattr(colmap, "use_gpu", True)),
+                min_registered_ratio=float(getattr(colmap, "min_registered_ratio", 0.70)),
+                min_registered_count=int(getattr(colmap, "min_registered_count", 20)),
+                max_exhaustive_images=int(getattr(colmap, "max_exhaustive_images", 80)),
+            )
+        return self._jobs.JobSpec(**spec_kwargs)
 
     def _wrap_lookup(self, job_id: str, fn: Any) -> Any:
         try:
@@ -133,13 +156,46 @@ class SqliteStoreAdapter:
 
 
 def tool_paths_from_settings(settings: Settings) -> Any:
+    from provisioner.bins import (
+        resolve_colmap_bin,
+        resolve_ffmpeg_bin,
+        resolve_ffprobe_bin,
+        resolve_python_bin,
+        resolve_simple_trainer,
+        resolve_splat_transform,
+    )
+
+    colmap = resolve_colmap_bin(settings.tool_colmap) or settings.tool_colmap
     return SimpleNamespace(
-        ffmpeg=settings.tool_ffmpeg,
-        ffprobe=settings.tool_ffprobe,
-        colmap=settings.tool_colmap,
-        python=settings.tool_python,
-        simple_trainer=settings.tool_simple_trainer,
-        splat_transform=settings.tool_splat_transform,
+        ffmpeg=resolve_ffmpeg_bin(settings.tool_ffmpeg),
+        ffprobe=resolve_ffprobe_bin(settings.tool_ffprobe),
+        colmap=colmap,
+        python=resolve_python_bin(settings.tool_python),
+        simple_trainer=resolve_simple_trainer(settings.tool_simple_trainer),
+        splat_transform=resolve_splat_transform(settings.tool_splat_transform),
+    )
+
+
+def train_from_settings(settings: Settings) -> Any:
+    steps = int(settings.train_max_steps)
+    degree = int(settings.train_sh_degree)
+    return SimpleNamespace(
+        data_factor=int(settings.train_data_factor),
+        max_steps=steps,
+        save_steps=(steps,),
+        eval_steps=(steps,),
+        ply_steps=(steps,),
+        extra_args=("--sh_degree", str(degree)),
+    )
+
+
+def colmap_from_settings(settings: Settings) -> Any:
+    return SimpleNamespace(
+        matcher="auto",
+        use_gpu=True,
+        min_registered_ratio=float(settings.colmap_min_registered_ratio),
+        min_registered_count=int(settings.colmap_min_registered_count),
+        max_exhaustive_images=int(settings.colmap_max_exhaustive_images),
     )
 
 
@@ -152,6 +208,8 @@ def build_pipeline_runtime(settings: Settings) -> JobRuntime:
         SourceKind,
         SqliteJobStore,
         ToolPaths,
+        ColmapConfig,
+        TrainConfig,
         default_handlers,
         record_from_dict,
     )
@@ -163,6 +221,8 @@ def build_pipeline_runtime(settings: Settings) -> JobRuntime:
         SourceKind=SourceKind,
         SqliteJobStore=SqliteJobStore,
         ToolPaths=ToolPaths,
+        ColmapConfig=ColmapConfig,
+        TrainConfig=TrainConfig,
         record_from_dict=record_from_dict,
     )
 

@@ -117,6 +117,7 @@ def _colmap(raw: dict[str, Any] | None) -> ColmapConfig:
         ),
         min_registered_ratio=float(data.get("min_registered_ratio", defaults.min_registered_ratio)),
         min_registered_count=int(data.get("min_registered_count", defaults.min_registered_count)),
+        max_exhaustive_images=int(data.get("max_exhaustive_images", defaults.max_exhaustive_images)),
         timeout_s=data.get("timeout_s", defaults.timeout_s),
     )
 

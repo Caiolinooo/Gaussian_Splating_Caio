@@ -23,6 +23,8 @@ from jobs import (  # type: ignore[import-not-found]
     default_handlers,
 )
 from jobs.store import record_from_dict  # type: ignore[import-not-found]
+from sfm.config import ColmapConfig  # type: ignore[import-not-found]
+from train.config import TrainConfig  # type: ignore[import-not-found]
 
 __all__ = [
     "JobMachine",
@@ -34,6 +36,8 @@ __all__ = [
     "SourceKind",
     "SqliteJobStore",
     "ToolPaths",
+    "ColmapConfig",
+    "TrainConfig",
     "default_handlers",
     "record_from_dict",
 ]

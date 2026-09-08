@@ -22,6 +22,7 @@ class ColmapConfig:
     sequential_quadratic_overlap: bool = True
     min_registered_ratio: float = 0.70
     min_registered_count: int = 20
+    max_exhaustive_images: int = 80
     timeout_s: float | None = None
 
     def __post_init__(self) -> None:
@@ -31,11 +32,21 @@ class ColmapConfig:
             raise ValueError("min_registered_count must be >= 2")
         if self.sequential_overlap < 1:
             raise ValueError("sequential_overlap must be >= 1")
+        if self.max_exhaustive_images < 2:
+            raise ValueError("max_exhaustive_images must be >= 2")
 
-    def resolve_matcher(self, source_kind: SourceKind) -> Literal["exhaustive", "sequential"]:
-        if self.matcher == "auto":
-            return "sequential" if source_kind == "video" else "exhaustive"
-        return self.matcher
+    def resolve_matcher(
+        self,
+        source_kind: SourceKind,
+        image_count: int | None = None,
+    ) -> Literal["exhaustive", "sequential"]:
+        if self.matcher != "auto":
+            return self.matcher
+        if source_kind == "video":
+            return "sequential"
+        if image_count is not None and image_count > self.max_exhaustive_images:
+            return "sequential"
+        return "exhaustive"
 
 
 @dataclass(frozen=True)

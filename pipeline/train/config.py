@@ -14,14 +14,14 @@ class TrainConfig:
     trainer_script: Path = Path("simple_trainer.py")
     subcommand: str = "default"
     data_factor: int = 4
-    max_steps: int = 30_000
-    save_steps: tuple[int, ...] = (7_000, 30_000)
-    eval_steps: tuple[int, ...] = (7_000, 30_000)
-    ply_steps: tuple[int, ...] = (7_000, 30_000)
+    max_steps: int = 7_000
+    save_steps: tuple[int, ...] = (7_000,)
+    eval_steps: tuple[int, ...] = (7_000,)
+    ply_steps: tuple[int, ...] = (7_000,)
     save_ply: bool = True
     disable_viewer: bool = True
     disable_video: bool = True
-    extra_args: tuple[str, ...] = field(default_factory=tuple)
+    extra_args: tuple[str, ...] = field(default_factory=lambda: ("--sh_degree", "2"))
     timeout_s: float | None = None
 
     def __post_init__(self) -> None:

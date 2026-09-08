@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from provisioner.bins import colmap_build_in_progress, resolve_colmap_bin
+
 COMMAND_TIMEOUT_S = 15
 MIN_DISK_FREE_GB = 60.0
 WARN_DISK_FREE_GB = 25.0
@@ -146,7 +148,13 @@ def detect_wsl() -> ComponentCheck:
         "https://learn.microsoft.com/pt-br/windows/wsl/install) e reinicie o computador."
     )
     if platform.system() != "Windows":
-        return ComponentCheck(key, name, Status.UNKNOWN, "A checagem de WSL2 só se aplica ao Windows.")
+        return ComponentCheck(
+            key,
+            name,
+            Status.OK,
+            "Linux nativo — WSL2 não se aplica neste servidor.",
+            details={"applicable": False},
+        )
     if shutil.which("wsl") is None and not os.path.exists(r"C:\Windows\System32\wsl.exe"):
         return ComponentCheck(key, name, Status.MISSING, "WSL não está instalado neste Windows.", fix_hint=fix)
 
@@ -311,19 +319,31 @@ def detect_ffmpeg() -> ComponentCheck:
 
 
 def detect_colmap() -> ComponentCheck:
-    """COLMAP disponível no PATH (SfM — structure-from-motion)."""
+    """COLMAP no PATH ou na compilação local do usuário — nunca dispara build."""
     key, name = "colmap", "COLMAP"
-    path = shutil.which("colmap")
+    path = resolve_colmap_bin("colmap")
     if path is None:
+        if colmap_build_in_progress():
+            return ComponentCheck(
+                key,
+                name,
+                Status.WARNING,
+                "Compilação local do COLMAP ainda em andamento — o job espera esse binário.",
+                details={"building": True},
+                fix_hint="Deixe a compilação terminar. Não instale colmap via apt por cima.",
+            )
         return ComponentCheck(
             key,
             name,
             Status.MISSING,
-            "COLMAP não encontrado no PATH.",
-            fix_hint="O Provisioner instalará o COLMAP automaticamente (releases oficiais com CUDA: https://github.com/colmap/colmap/releases).",
+            "COLMAP não encontrado no PATH nem em ~/colmap/build.",
+            fix_hint=(
+                "Termine a compilação local (ex.: ~/colmap/build/src/colmap/exe/colmap). "
+                "O app não recompila e não instala colmap via apt."
+            ),
         )
     first_line: str | None = None
-    result = _run(["colmap", "-h"])
+    result = _run([path, "-h"])
     if result is not None and result.stdout:
         first_line = result.stdout.splitlines()[0].strip() or None
     return ComponentCheck(
@@ -351,4 +371,62 @@ def detect_python() -> ComponentCheck:
         f"Python {version} é mais antigo que o mínimo exigido ({required}+).",
         details=details,
         fix_hint=f"Instale o Python {required} ou superior (https://www.python.org/downloads/).",
+    )
+
+
+def detect_pytorch() -> ComponentCheck:
+    """PyTorch no interpretador atual (treino 3DGS)."""
+    key, name = "pytorch", "PyTorch"
+    result = _run([sys.executable, "-c", "import torch; print(torch.__version__, int(torch.cuda.is_available()), torch.version.cuda or '')"])
+    if result is None or result.returncode != 0:
+        return ComponentCheck(
+            key,
+            name,
+            Status.MISSING,
+            "PyTorch não está instalado neste Python.",
+            details={"executable": sys.executable},
+            fix_hint="Rode o Setup: o Provisioner instala PyTorch+CUDA no Linux com GPU.",
+        )
+    parts = result.stdout.strip().split()
+    version = parts[0] if parts else "?"
+    cuda_ok = parts[1] == "1" if len(parts) > 1 else False
+    cuda_ver = parts[2] if len(parts) > 2 else ""
+    if cuda_ok:
+        return ComponentCheck(
+            key,
+            name,
+            Status.OK,
+            f"PyTorch {version} com CUDA {cuda_ver or 'ok'}.",
+            details={"version": version, "cuda": cuda_ver, "executable": sys.executable},
+        )
+    return ComponentCheck(
+        key,
+        name,
+        Status.WARNING,
+        f"PyTorch {version} sem CUDA — o treino 3DGS neste processo seria CPU.",
+        details={"version": version, "cuda": cuda_ver, "executable": sys.executable},
+        fix_hint="Instale a wheel CUDA (cu128) no venv do servidor.",
+    )
+
+
+def detect_gsplat() -> ComponentCheck:
+    """Pacote gsplat importável no interpretador atual."""
+    key, name = "gsplat", "gsplat"
+    result = _run([sys.executable, "-c", "import gsplat; print(getattr(gsplat, '__version__', 'ok'))"])
+    if result is None or result.returncode != 0:
+        return ComponentCheck(
+            key,
+            name,
+            Status.MISSING,
+            "gsplat não está instalado neste Python.",
+            details={"executable": sys.executable},
+            fix_hint="Rode o Setup: o Provisioner instala a wheel/JIT do gsplat no Linux com GPU.",
+        )
+    version = result.stdout.strip() or "ok"
+    return ComponentCheck(
+        key,
+        name,
+        Status.OK,
+        f"gsplat {version} importável.",
+        details={"version": version, "executable": sys.executable},
     )

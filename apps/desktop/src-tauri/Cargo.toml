@@ -1,6 +1,6 @@
 [package]
 name = "gsplat-studio"
-version = "0.1.0"
+version = "0.2.0"
 description = "Shell desktop (Tauri v2) da plataforma de Gaussian Splatting"
 edition = "2021"
 rust-version = "1.77.2"

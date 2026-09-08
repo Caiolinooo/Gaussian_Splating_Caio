@@ -31,7 +31,12 @@ from app.services.job_records import (
     to_detail,
     to_summary,
 )
-from app.services.job_runtime import JobRuntime, tool_paths_from_settings
+from app.services.job_runtime import (
+    JobRuntime,
+    colmap_from_settings,
+    tool_paths_from_settings,
+    train_from_settings,
+)
 from app.services.job_supervisor import JobLookupError
 from app.services.upload_service import parse_user_height_m, require_idempotency_key, save_uploads
 
@@ -96,6 +101,8 @@ async def create_job(
         work_root=runtime.settings.resolved_data_root(),
         idempotency_key=key,
         tools=tool_paths_from_settings(runtime.settings),
+        train=train_from_settings(runtime.settings),
+        colmap=colmap_from_settings(runtime.settings),
     )
     try:
         record = runtime.machine.create(spec, job_id=job_id)

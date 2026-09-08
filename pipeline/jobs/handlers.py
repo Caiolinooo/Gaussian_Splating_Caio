@@ -234,10 +234,17 @@ def handle_export(record: JobRecord, progress: Callable[[float, str], None], run
         frames_dir=paths.kept_frames_dir if paths.kept_frames_dir.is_dir() else None,
         progress=progress,
     )
-    artifacts = {"master_ply": str(result.master_ply), "web_ksplat": str(result.web_ksplat)}
+    artifacts = {"master_ply": str(result.master_ply)}
+    if result.web_ksplat.is_file():
+        artifacts["web_ksplat"] = str(result.web_ksplat)
     if result.thumbnail is not None:
         artifacts["thumbnail"] = str(result.thumbnail)
-    return StageOutcome(artifacts=artifacts, metrics={}, message="Export .ply + .ksplat concluído.")
+    message = (
+        "Export .ply + .ksplat concluído."
+        if result.web_ksplat.is_file()
+        else "Export .ply concluído; .ksplat omitido (splat-transform ausente)."
+    )
+    return StageOutcome(artifacts=artifacts, metrics={}, message=message)
 
 
 def handle_meshproxy(record: JobRecord, progress: Callable[[float, str], None]) -> StageOutcome:

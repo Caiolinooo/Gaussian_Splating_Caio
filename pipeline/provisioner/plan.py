@@ -48,8 +48,8 @@ class StepResult:
 PROVISIONING_PLAN: list[InstallStep] = [
     InstallStep("detect", "Detectar componentes do ambiente"),
     InstallStep("ffmpeg", "Instalar FFmpeg"),
-    InstallStep("colmap", "Instalar COLMAP (com CUDA)"),
-    InstallStep("python-env", "Preparar ambiente Python no WSL2 (PyTorch + CUDA)"),
+    InstallStep("colmap", "Localizar COLMAP (compilação do usuário)"),
+    InstallStep("python-env", "Preparar ambiente Python (PyTorch + CUDA)"),
     InstallStep("gsplat", "Instalar gsplat (wheel pré-compilada)"),
     InstallStep("verify", "Verificar saúde pós-instalação"),
 ]
