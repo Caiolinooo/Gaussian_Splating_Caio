@@ -203,8 +203,7 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
               />
             </div>
             <p className="muted">
-              {asDisplayPercent(overall)}%
-              {etaLabel ? ` · tempo restante: ${etaLabel}` : ''}
+              {asDisplayPercent(overall)}%{etaLabel ? ` · tempo restante: ${etaLabel}` : ''}
             </p>
           </div>
 

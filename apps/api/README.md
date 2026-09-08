@@ -27,20 +27,20 @@ caminho suportado.
 
 ## Variáveis de ambiente
 
-| Variável                                                                                                        | Default            | Função                                                                 |
-| --------------------------------------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------- |
-| `DATA_ROOT`                                                                                                     | `data`             | Uploads, cenas e `pipeline-jobs.sqlite`                                |
-| `SUPABASE_JWT_SECRET`                                                                                           | (vazio)            | Segredo HS256 do JWT Supabase                                          |
-| `SUPABASE_URL`                                                                                                  | (vazio)            | Base para JWKS (`/auth/v1/.well-known/jwks.json`) se o token for ES256 |
-| `SUPABASE_JWKS_URL`                                                                                             | (vazio)            | Override do JWKS                                                       |
-| `DEV_AUTH_BYPASS`                                                                                               | `0`                | `1`/`true` → usuário fixo `dev-user` (sem token)                       |
-| `CORS_ORIGINS`                                                                                                  | localhost:5173/2222 | CSV ou JSON; `*` libera origem (sem credentials)                      |
-| `SERVE_WEB_DIR`                                                                                                 | (vazio)            | Pasta `apps/web/dist` para UI+API no mesmo processo                    |
-| `PIPELINE_PATH`                                                                                                 | `../../pipeline`   | Onde está o pacote `jobs`                                              |
-| `MAX_UPLOAD_MB`                                                                                                 | `2048`             | Teto de upload (vídeo ou soma das imagens)                             |
-| `MAX_VIDEO_DURATION_S`                                                                                          | `1200`             | Duração máxima (só se `ffprobe` estiver disponível)                    |
-| `MIN_IMAGES`                                                                                                    | `20`               | Mínimo de imagens no modo `files[]`                                    |
-| `TOOL_FFMPEG` / `TOOL_FFPROBE` / `TOOL_COLMAP` / `TOOL_PYTHON` / `TOOL_SIMPLE_TRAINER` / `TOOL_SPLAT_TRANSFORM` | nomes dos binários | Preenchidos em `ToolPaths` na criação do job                           |
+| Variável                                                                                                        | Default             | Função                                                                 |
+| --------------------------------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------- |
+| `DATA_ROOT`                                                                                                     | `data`              | Uploads, cenas e `pipeline-jobs.sqlite`                                |
+| `SUPABASE_JWT_SECRET`                                                                                           | (vazio)             | Segredo HS256 do JWT Supabase                                          |
+| `SUPABASE_URL`                                                                                                  | (vazio)             | Base para JWKS (`/auth/v1/.well-known/jwks.json`) se o token for ES256 |
+| `SUPABASE_JWKS_URL`                                                                                             | (vazio)             | Override do JWKS                                                       |
+| `DEV_AUTH_BYPASS`                                                                                               | `0`                 | `1`/`true` → usuário fixo `dev-user` (sem token)                       |
+| `CORS_ORIGINS`                                                                                                  | localhost:5173/2222 | CSV ou JSON; `*` libera origem (sem credentials)                       |
+| `SERVE_WEB_DIR`                                                                                                 | (vazio)             | Pasta `apps/web/dist` para UI+API no mesmo processo                    |
+| `PIPELINE_PATH`                                                                                                 | `../../pipeline`    | Onde está o pacote `jobs`                                              |
+| `MAX_UPLOAD_MB`                                                                                                 | `2048`              | Teto de upload (vídeo ou soma das imagens)                             |
+| `MAX_VIDEO_DURATION_S`                                                                                          | `1200`              | Duração máxima (só se `ffprobe` estiver disponível)                    |
+| `MIN_IMAGES`                                                                                                    | `20`                | Mínimo de imagens no modo `files[]`                                    |
+| `TOOL_FFMPEG` / `TOOL_FFPROBE` / `TOOL_COLMAP` / `TOOL_PYTHON` / `TOOL_SIMPLE_TRAINER` / `TOOL_SPLAT_TRANSFORM` | nomes dos binários  | Preenchidos em `ToolPaths` na criação do job                           |
 
 Auth de desenvolvimento (sem projeto Supabase):
 

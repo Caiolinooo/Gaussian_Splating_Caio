@@ -162,19 +162,21 @@ export const useJobsStore = create<JobsStore>((set, get) => ({
         return current?.job_id === jobId ? isTerminalState(current.state) : false;
       },
     });
-    void get().fetchDetail(jobId).then(() => {
-      const current = get().current;
-      if (get().subscribedJobId !== jobId) {
-        return;
-      }
-      if (current && isTerminalState(current.state)) {
-        if (unsubscribeEvents) {
-          unsubscribeEvents();
-          unsubscribeEvents = null;
+    void get()
+      .fetchDetail(jobId)
+      .then(() => {
+        const current = get().current;
+        if (get().subscribedJobId !== jobId) {
+          return;
         }
-        set({ connection: 'closed', transport: null });
-      }
-    });
+        if (current && isTerminalState(current.state)) {
+          if (unsubscribeEvents) {
+            unsubscribeEvents();
+            unsubscribeEvents = null;
+          }
+          set({ connection: 'closed', transport: null });
+        }
+      });
   },
 
   unsubscribe: () => {

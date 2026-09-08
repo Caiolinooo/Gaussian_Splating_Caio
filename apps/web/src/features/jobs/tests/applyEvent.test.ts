@@ -37,10 +37,7 @@ describe('markPriorStagesDone', () => {
   });
 
   it('não cria etapa ausente nem sobrescreve skipped/failed', () => {
-    const next = markPriorStagesDone(
-      { extracting: { status: 'skipped', progress: 1 } },
-      'sfm',
-    );
+    const next = markPriorStagesDone({ extracting: { status: 'skipped', progress: 1 } }, 'sfm');
     expect(next.extracting?.status).toBe('skipped');
     expect(next.training).toBeUndefined();
   });
