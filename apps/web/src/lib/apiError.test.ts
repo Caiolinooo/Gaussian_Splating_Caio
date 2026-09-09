@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseApiErrorBody } from './api';
+import { isAuthFailure } from './sessionInvalidation';
 
 describe('parseApiErrorBody', () => {
   it('lê o envelope FastAPI {detail:{message,code}} como primário', () => {
@@ -10,6 +11,23 @@ describe('parseApiErrorBody', () => {
     );
     expect(error.message).toBe('Job não encontrado.');
     expect(error.errorCode).toBe('JOB_NOT_FOUND');
+  });
+
+  it('lê Token inválido / UNAUTHENTICATED como falha de sessão', () => {
+    const invalid = parseApiErrorBody(
+      JSON.stringify({ detail: { message: 'Token inválido.', code: 'TOKEN_INVALID' } }),
+      401,
+    );
+    expect(invalid.message).toBe('Token inválido.');
+    expect(isAuthFailure(invalid)).toBe(true);
+
+    const missing = parseApiErrorBody(
+      JSON.stringify({
+        detail: { message: 'Não autenticado. Envie um token Bearer válido.', code: 'UNAUTHENTICATED' },
+      }),
+      401,
+    );
+    expect(isAuthFailure(missing)).toBe(true);
   });
 
   it('ainda aceita o formato legado {error_code,message}', () => {

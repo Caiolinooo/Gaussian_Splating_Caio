@@ -14,7 +14,7 @@ class ExportConfig:
     floater_voxel: float = 0.05
     floater_opacity: float = 0.1
     floater_min_contribution: float = 0.004
-    web_sh_degree: int | None = 2
+    web_sh_degree: int | None = 3
     thumbnail_max_edge: int = 512
     thumbnail_name: str = "preview.jpg"
     timeout_s: float | None = None

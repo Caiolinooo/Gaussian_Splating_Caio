@@ -60,7 +60,15 @@ TRANSITIONS: dict[JobState, frozenset[JobState]] = {
     JobState.EXPORTING: frozenset({JobState.MESHPROXY, JobState.ERROR, JobState.CANCELLED}),
     JobState.MESHPROXY: frozenset({JobState.AUTOCAL, JobState.ERROR, JobState.CANCELLED}),
     JobState.AUTOCAL: frozenset({JobState.DONE, JobState.ERROR, JobState.CANCELLED}),
-    JobState.DONE: frozenset(),
+    JobState.DONE: frozenset(
+        {
+            JobState.SFM,
+            JobState.TRAINING,
+            JobState.EXPORTING,
+            JobState.MESHPROXY,
+            JobState.AUTOCAL,
+        }
+    ),
     JobState.ERROR: frozenset(
         {
             JobState.QUEUED,

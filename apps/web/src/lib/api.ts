@@ -1,3 +1,4 @@
+import { invalidateClientSession, isAuthFailure } from './sessionInvalidation';
 import { getAccessToken, isDevAuthBypass } from './supabase';
 
 /**
@@ -5,7 +6,8 @@ import { getAccessToken, isDevAuthBypass } from './supabase';
  *
  * Auth
  *   Authorization: Bearer <supabase access_token>
- *   Dev: VITE_DEV_AUTH_BYPASS=1 envia `Bearer dev-bypass`.
+ *   Dev localhost: VITE_DEV_AUTH_BYPASS=1 envia `Bearer dev-bypass`.
+ *   Servidor remoto nunca usa bypass (hostname + .env.production).
  *
  * POST /jobs
  *   multipart/form-data:
@@ -65,7 +67,10 @@ export function resolveApiBaseUrl(input: ResolveApiBaseUrlInput): string {
   const origin = input.origin?.replace(/\/+$/, '') ?? '';
   const viteDev = input.port === '5173';
   if (viteDev) {
-    return fromEnv || DEFAULT_API_URL;
+    if (fromEnv && !isLoopbackApiUrl(fromEnv)) {
+      return fromEnv;
+    }
+    return origin || fromEnv || DEFAULT_API_URL;
   }
   if (origin) {
     if (!fromEnv || isLoopbackApiUrl(fromEnv)) {
@@ -293,6 +298,10 @@ export async function request<T>(
         await sleep(RETRY_BASE_MS * 2 ** attempt);
         continue;
       }
+      if (error instanceof ApiError && isAuthFailure(error)) {
+        invalidateClientSession();
+        throw error;
+      }
       if (error instanceof ApiError) {
         throw error;
       }
@@ -378,7 +387,11 @@ export function createJob(input: CreateJobInput): Promise<CreateJobResponse> {
         const status = xhr.status;
         const text = xhr.responseText ?? '';
         if (status < 200 || status >= 300) {
-          reject(parseApiErrorBody(text, status));
+          const error = parseApiErrorBody(text, status);
+          if (isAuthFailure(error)) {
+            invalidateClientSession();
+          }
+          reject(error);
           return;
         }
         try {
@@ -479,9 +492,18 @@ export async function deleteJob(jobId: string): Promise<void> {
   await request<void>(`/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' }, { retry: false });
 }
 
+export async function rebuildJob(jobId: string, fromStage = 'sfm'): Promise<{ job_id: string; state: string }> {
+  return request<{ job_id: string; state: string }>(
+    `/jobs/${encodeURIComponent(jobId)}/rebuild?from_stage=${encodeURIComponent(fromStage)}`,
+    { method: 'POST' },
+    { retry: false },
+  );
+}
+
 export const jobsApi = {
   create: createJob,
   list: listJobs,
   get: getJob,
   delete: deleteJob,
+  rebuild: rebuildJob,
 };

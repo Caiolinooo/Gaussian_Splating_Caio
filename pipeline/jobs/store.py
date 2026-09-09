@@ -136,6 +136,9 @@ def _colmap(raw: dict[str, Any] | None) -> ColmapConfig:
                 defaults.mapper_ba_global_max_num_iterations,
             )
         ),
+        sift_peak_threshold=data.get("sift_peak_threshold", defaults.sift_peak_threshold),
+        sift_edge_threshold=data.get("sift_edge_threshold", defaults.sift_edge_threshold),
+        sift_max_num_features=data.get("sift_max_num_features", defaults.sift_max_num_features),
     )
 
 

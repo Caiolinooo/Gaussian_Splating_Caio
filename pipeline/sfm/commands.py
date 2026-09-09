@@ -145,6 +145,19 @@ def build_model_converter_txt_command(config: ColmapConfig, model_dir: Path) -> 
     ]
 
 
+def build_model_converter_bin_command(config: ColmapConfig, model_dir: Path) -> list[str]:
+    return [
+        config.colmap_bin,
+        "model_converter",
+        "--input_path",
+        str(model_dir),
+        "--output_path",
+        str(model_dir),
+        "--output_type",
+        "BIN",
+    ]
+
+
 def build_sfm_pipeline_commands(
     config: ColmapConfig,
     paths: ColmapPaths,

@@ -1,6 +1,7 @@
 import type { Session, User } from '@supabase/supabase-js';
 
 import { getApiBaseUrl } from './api';
+import { LOCAL_AUTH_STORAGE_KEY } from './sessionInvalidation';
 
 /**
  * Login local (sem Supabase): a API emite JWT HS256 quando
@@ -8,7 +9,7 @@ import { getApiBaseUrl } from './api';
  * Sessão persistida em localStorage (`gs-local-auth`).
  */
 
-const STORAGE_KEY = 'gs-local-auth';
+const STORAGE_KEY = LOCAL_AUTH_STORAGE_KEY;
 
 export interface LocalSession {
   access_token: string;
@@ -37,6 +38,11 @@ export function getLocalSession(): LocalSession | null {
     }
     const parsed = JSON.parse(raw) as Partial<LocalSession>;
     if (typeof parsed.access_token !== 'string' || typeof parsed.expires_at !== 'number') {
+      return null;
+    }
+    const jwtParts = parsed.access_token.split('.');
+    if (parsed.access_token === 'dev-bypass' || jwtParts.length !== 3 || jwtParts.some((part) => !part)) {
+      store.removeItem(STORAGE_KEY);
       return null;
     }
     if (!parsed.user || typeof parsed.user.id !== 'string') {

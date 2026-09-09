@@ -30,7 +30,7 @@ function plantSession(expiresInS = 3600): void {
   localStorage.setItem(
     STORE_KEY,
     JSON.stringify({
-      access_token: 'token-abc',
+      access_token: 'aaa.bbb.ccc',
       expires_at: Math.floor(Date.now() / 1000) + expiresInS,
       user: { id: 'caio', email: null },
     }),
@@ -51,7 +51,7 @@ describe('localAuth storage', () => {
     const session = getLocalSession();
     expect(session?.user.id).toBe('caio');
     const asSupabase = localSessionAsSupabase(session!);
-    expect(asSupabase.access_token).toBe('token-abc');
+    expect(asSupabase.access_token).toBe('aaa.bbb.ccc');
     expect(asSupabase.user.id).toBe('caio');
   });
 
@@ -64,6 +64,32 @@ describe('localAuth storage', () => {
   it('ignora JSON inválido', () => {
     localStorage.setItem(STORE_KEY, '{quebrado');
     expect(getLocalSession()).toBeNull();
+  });
+
+  it('descarta JWT malformado (não são 3 partes)', () => {
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({
+        access_token: 'not-a-jwt',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: { id: 'caio', email: null },
+      }),
+    );
+    expect(getLocalSession()).toBeNull();
+    expect(localStorage.getItem(STORE_KEY)).toBeNull();
+  });
+
+  it('descarta token fake dev-bypass', () => {
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({
+        access_token: 'dev-bypass',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: { id: 'dev-user', email: 'dev@localhost' },
+      }),
+    );
+    expect(getLocalSession()).toBeNull();
+    expect(localStorage.getItem(STORE_KEY)).toBeNull();
   });
 
   it('clearLocalSession remove a chave', () => {

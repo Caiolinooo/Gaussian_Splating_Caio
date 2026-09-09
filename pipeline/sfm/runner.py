@@ -154,7 +154,7 @@ def _run_graph(
     dialect: ColmapCliDialect,
     progress: ProgressFn | None,
 ) -> tuple[Literal["exhaustive", "sequential"], list[list[str]], str]:
-    matcher = config.resolve_matcher(source_kind)
+    matcher = config.resolve_matcher(source_kind, image_count=count_input_images(paths.image_dir))
     commands = build_sfm_pipeline_commands(config, paths, source_kind=source_kind, dialect=dialect)
     chunks: list[str] = []
     total = len(commands)
@@ -299,6 +299,7 @@ def run_sfm(
     cpu_tried = not config.use_gpu
     rescue_tried = False
     coherence_tried = False
+    sequential_tried = config.matcher == "sequential"
     index = 0
     while index < len(plans):
         plan = plans[index]
@@ -395,6 +396,29 @@ def run_sfm(
                 index += 1
                 continue
             raise
+
+        _cameras, points = score_reconstruction(paths.model_dir)
+        if (
+            source_kind == "video"
+            and points < 200
+            and not sequential_tried
+            and matcher != "sequential"
+        ):
+            sequential_tried = True
+            plans.append(replace(config, matcher="sequential"))
+            LOGGER.warning(
+                "event=colmap_sequential_fallback points=%s registered=%s",
+                points,
+                summary.registered_count,
+            )
+            _append_log(
+                paths,
+                f"\n===== degenerate sparse ({points} points); retrying sequential_matcher =====\n",
+            )
+            if progress is not None:
+                progress(0.0, "Modelo esparso degenerado — tentando matcher sequencial de vídeo…")
+            index += 1
+            continue
 
         done_message = summary.warning or f"{summary.registered_count} imagens registradas."
         if progress is not None:

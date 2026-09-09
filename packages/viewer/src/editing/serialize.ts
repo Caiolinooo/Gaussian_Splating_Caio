@@ -144,6 +144,9 @@ function cloneTemporal(temporal: TemporalJson): TemporalJson {
     fps: temporal.fps,
     currentTime: temporal.currentTime,
     sourceKind: temporal.sourceKind,
+    times: temporal.times ? [...temporal.times] : undefined,
+    cameras: temporal.cameras ? temporal.cameras.map((camera) => ({ ...camera })) : undefined,
+    clusters: temporal.clusters ? temporal.clusters.map((cluster) => ({ ...cluster })) : undefined,
   };
 }
 
@@ -153,6 +156,9 @@ function cloneRelight(relight: RelightJson): RelightJson {
     mode: relight.mode,
     hasSphericalHarmonics: relight.hasSphericalHarmonics,
     shDegree: relight.shDegree,
+    azimuthDeg: relight.azimuthDeg,
+    elevationDeg: relight.elevationDeg,
+    intensity: relight.intensity,
   };
 }
 
@@ -312,6 +318,13 @@ function parseTemporal(value: unknown): TemporalJson {
     currentTime:
       value.currentTime == null ? 0 : readNumber(value.currentTime, 'temporal.currentTime'),
     sourceKind,
+    times: Array.isArray(value.times)
+      ? value.times.filter((item): item is number => typeof item === 'number')
+      : undefined,
+    cameras: Array.isArray(value.cameras) ? (value.cameras as TemporalJson['cameras']) : undefined,
+    clusters: Array.isArray(value.clusters)
+      ? (value.clusters as TemporalJson['clusters'])
+      : undefined,
   };
 }
 
@@ -341,10 +354,14 @@ function parseRelight(value: unknown): RelightJson {
     throw new SceneSchemaError('relight', 'relight deve ser objeto.');
   }
   return {
-    enabled: value.enabled === true,
+    enabled: value.enabled !== false,
     mode: parseRelightMode(value.mode),
     hasSphericalHarmonics: value.hasSphericalHarmonics !== false,
-    shDegree: value.shDegree == null ? 2 : readInt(value.shDegree, 'relight.shDegree'),
+    shDegree: value.shDegree == null ? 3 : readInt(value.shDegree, 'relight.shDegree'),
+    azimuthDeg: value.azimuthDeg == null ? 45 : readNumber(value.azimuthDeg, 'relight.azimuthDeg'),
+    elevationDeg:
+      value.elevationDeg == null ? 35 : readNumber(value.elevationDeg, 'relight.elevationDeg'),
+    intensity: value.intensity == null ? 1 : readNumber(value.intensity, 'relight.intensity'),
   };
 }
 
@@ -352,11 +369,12 @@ function parseRelightMode(value: unknown): RelightMode {
   switch (value) {
     case 'baked-sh':
     case 'preview':
+    case 'sh-env':
     case 'unsupported':
       return value;
     case undefined:
     case null:
-      return 'unsupported';
+      return 'sh-env';
     default:
       throw new SceneSchemaError('relight-mode', `relight.mode inválido: ${String(value)}`);
   }

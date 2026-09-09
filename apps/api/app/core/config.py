@@ -38,6 +38,8 @@ DEFAULT_CORS_ORIGINS = (
     "http://127.0.0.1:5173",
     "http://localhost:2222",
     "http://127.0.0.1:2222",
+    "http://vm.groupabz.com:2222",
+    "https://vm.groupabz.com:2222",
     "tauri://localhost",
     "http://tauri.localhost",
 )
@@ -150,12 +152,12 @@ class Settings(BaseSettings):
     tool_python: str = "python"
     tool_simple_trainer: str = "simple_trainer.py"
     tool_splat_transform: str = "splat-transform"
-    train_max_steps: int = 3500
-    train_data_factor: int = 4
-    train_sh_degree: int = 2
+    train_max_steps: int = 30_000
+    train_data_factor: int = 2
+    train_sh_degree: int = 3
     colmap_min_registered_count: int = 20
     colmap_min_registered_ratio: float = 0.70
-    colmap_max_exhaustive_images: int = 80
+    colmap_max_exhaustive_images: int = 220
     # Quando True, o SfM tenta GPU primeiro e cai para CPU automaticamente se
     # feature_extractor/matcher falharem (servidor headless sem contexto GL).
     colmap_use_gpu: bool = True

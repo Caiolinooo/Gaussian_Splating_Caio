@@ -50,15 +50,28 @@ export interface TemporalJson {
   fps: number | null;
   currentTime: number;
   sourceKind: TemporalSourceKind;
+  times?: number[];
+  cameras?: TemporalCameraJson[];
+  clusters?: Record<string, unknown>[];
 }
 
-export type RelightMode = 'baked-sh' | 'preview' | 'unsupported';
+export type RelightMode = 'baked-sh' | 'preview' | 'sh-env' | 'unsupported';
 
 export interface RelightJson {
   enabled: boolean;
   mode: RelightMode;
   hasSphericalHarmonics: boolean;
   shDegree: number | null;
+  azimuthDeg?: number;
+  elevationDeg?: number;
+  intensity?: number;
+}
+
+export interface TemporalCameraJson {
+  t: number;
+  position: [number, number, number];
+  target: [number, number, number];
+  name?: string;
 }
 
 export const DEFAULT_TEMPORAL: TemporalJson = Object.freeze({
@@ -71,10 +84,13 @@ export const DEFAULT_TEMPORAL: TemporalJson = Object.freeze({
 });
 
 export const DEFAULT_RELIGHT: RelightJson = Object.freeze({
-  enabled: false,
-  mode: 'unsupported',
+  enabled: true,
+  mode: 'sh-env',
   hasSphericalHarmonics: true,
-  shDegree: 2,
+  shDegree: 3,
+  azimuthDeg: 45,
+  elevationDeg: 35,
+  intensity: 1,
 });
 
 export interface CalibrationJson {

@@ -57,8 +57,8 @@ export function UploadWizard({ onSubmitted, onCancel }: UploadWizardProps) {
           <h1>Novo processamento</h1>
           <p className="muted">
             Envie um vídeo, um GIF, um PLY ou um conjunto de imagens e informe a sua altura.
-            No servidor L4 o caminho rápido leva cerca de 15–25 minutos (~180 frames e
-            3500 passos de treino).
+            No servidor L4 o caminho de qualidade leva cerca de 40–90 minutos (~180 frames,
+            COLMAP exhaustive e 15000 passos de treino SH 3).
           </p>
         </div>
         {onCancel && (

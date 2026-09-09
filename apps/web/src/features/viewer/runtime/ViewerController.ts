@@ -1,14 +1,20 @@
 import { OverlayManager, OverlayValidationError, type OverlayDraft } from '@gs/overlays';
 import {
+  clusterOffsetAt,
+  createOpenCvToThreeTRS,
   createSplatRenderer,
   createTRS,
+  interpolateCamera,
   pickClosest,
   pickMeshes,
+  relightRgb,
   SceneManager,
   toShDegree,
   TransformGizmo,
   type CalibrationJson,
   type LengthUnit,
+  type RelightJson,
+  type RelightParams,
   type RendererBackendKind,
   type SplatFormat,
   type SplatHandle,
@@ -52,7 +58,7 @@ import { extractOverlayDocument, toSceneOverlaySummaries } from '../../overlays/
 import { useOverlayStore } from '../../overlays/store/overlayStore';
 import { useViewerStore } from '../store/viewerStore';
 import type { CameraPreset, WorkspaceTool } from '../types';
-import { applyCameraPreset } from './cameraPresets';
+import { applyCameraPreset, fitOrbitToBox } from './cameraPresets';
 import { asObject3D, createThreeHost, resolveNodeId, setNodeId } from './createThreeHost';
 import { pointerToNdc, rayFromPointer } from './ndc';
 import { TapeVisuals } from './tapeVisuals';
@@ -98,11 +104,14 @@ export class ViewerController {
   private unsubEditing: (() => void) | null = null;
   private unsubUnits: (() => void) | null = null;
   private extras: CalibrationExtras = {};
+  private ambientLight: THREE.AmbientLight;
+  private keyLight: THREE.DirectionalLight;
+  private splatBaseTrs = createOpenCvToThreeTRS();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.scene.background = new THREE.Color(0x070b16);
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.05, 400);
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.05, 5000);
     this.camera.position.set(4.2, 3.3, 4.2);
 
     this.webgl = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
@@ -111,12 +120,28 @@ export class ViewerController {
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
+    this.controls.enableRotate = true;
+    this.controls.enablePan = true;
+    this.controls.enableZoom = true;
+    this.controls.screenSpacePanning = true;
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN,
+    };
+    this.controls.touches = {
+      ONE: THREE.TOUCH.ROTATE,
+      TWO: THREE.TOUCH.DOLLY_PAN,
+    };
+    this.controls.minDistance = 0.05;
+    this.controls.maxDistance = 8000;
     this.controls.target.set(0, 1, 0);
 
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const key = new THREE.DirectionalLight(0xffffff, 1.1);
-    key.position.set(4, 8, 3);
-    this.scene.add(key);
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    this.scene.add(this.ambientLight);
+    this.keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+    this.keyLight.position.set(4, 8, 3);
+    this.scene.add(this.keyLight);
 
     const grid = new THREE.GridHelper(10, 10, 0x334155, 0x1e293b);
     grid.name = 'meter-grid';
@@ -174,12 +199,7 @@ export class ViewerController {
     store.setLoad('scene', 0, 'Abrindo a cena…');
     useCalibrationStore.getState().setGatePhase('hidden');
 
-    if (options.initialTool === 'tape') {
-      useTapeStore.getState().toggleActive(true);
-    }
-    if (options.initialTool === 'overlay') {
-      useOverlayStore.getState().patchDraft({ placementMode: true });
-    }
+    this.setWorkspaceTool(options.initialTool ?? 'orbit');
 
     try {
       const created = await createSplatRenderer(
@@ -233,6 +253,7 @@ export class ViewerController {
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerup', this.onPointerUp);
+    this.canvas.removeEventListener('contextmenu', this.onContextMenu);
     window.removeEventListener('keydown', this.onKeyDown);
     this.unsubScene?.();
     this.unsubOverlays?.();
@@ -256,6 +277,36 @@ export class ViewerController {
     useViewerStore.getState().setCameraPreset(preset);
   }
 
+  setWorkspaceTool(tool: WorkspaceTool): void {
+    useViewerStore.getState().setWorkspaceTool(tool);
+    const tape = useTapeStore.getState();
+    if (tool === 'tape') {
+      if (!tape.active) {
+        tape.toggleActive(true);
+      }
+    } else if (tape.active) {
+      tape.toggleActive(false);
+    }
+    useOverlayStore.getState().patchDraft({ placementMode: tool === 'overlay' });
+    if (tool !== 'edit') {
+      this.selectNode(null);
+    }
+    this.controls.enableRotate = tool !== 'tape';
+    this.controls.enablePan = true;
+    this.controls.enableZoom = true;
+  }
+
+  fitToSplat(): boolean {
+    if (!this.splatRenderer) {
+      return false;
+    }
+    const box = this.splatRenderer.getWorldBounds(this.splatHandle ?? undefined);
+    if (!box) {
+      return false;
+    }
+    return fitOrbitToBox(this.camera, this.controls, box);
+  }
+
   setQuality(patch: Partial<SplatQuality>): void {
     if (!this.splatRenderer) {
       return;
@@ -266,19 +317,21 @@ export class ViewerController {
 
   setPlaybackTime(normalized: number): void {
     const clamped = Math.max(0, Math.min(1, normalized));
-    this.splatRenderer?.setTime(clamped);
     const current = this.sceneManager.getState().temporal;
     const next = { ...current, currentTime: clamped };
     this.sceneManager.setTemporal(next);
     useViewerStore.getState().setTemporal(next);
+    this.applyTemporalPose(next);
   }
 
   setRelightPreview(enabled: boolean): void {
-    this.splatRenderer?.setRelightEnabled(enabled);
     const current = this.sceneManager.getState().relight;
-    const next = { ...current, enabled };
-    this.sceneManager.setRelight(next);
-    useViewerStore.getState().setRelight(next);
+    this.applyRelight({ ...current, enabled });
+  }
+
+  setRelightEnv(patch: Partial<Pick<RelightJson, 'azimuthDeg' | 'elevationDeg' | 'intensity' | 'enabled'>>): void {
+    const current = this.sceneManager.getState().relight;
+    this.applyRelight({ ...current, ...patch, mode: current.mode === 'unsupported' ? 'sh-env' : current.mode });
   }
 
   downloadSceneJson(): void {
@@ -632,8 +685,69 @@ export class ViewerController {
     const state = this.sceneManager.getState();
     useViewerStore.getState().setTemporal(state.temporal);
     useViewerStore.getState().setRelight(state.relight);
-    this.splatRenderer?.setTime(state.temporal.currentTime);
-    this.splatRenderer?.setRelightEnabled(state.relight.enabled);
+    this.applyRelight(state.relight);
+    this.applyTemporalPose(state.temporal, { followCamera: false });
+  }
+
+  private applyTemporalPose(
+    temporal: ReturnType<SceneManager['getState']>['temporal'],
+    options: { followCamera?: boolean } = {},
+  ): void {
+    this.splatRenderer?.setTime(temporal.currentTime);
+    if (this.splatHandle && this.splatRenderer) {
+      const offset = clusterOffsetAt(temporal, temporal.currentTime);
+      this.splatRenderer.setTRS(this.splatHandle, {
+        ...this.splatBaseTrs,
+        position: {
+          x: this.splatBaseTrs.position.x + offset[0],
+          y: this.splatBaseTrs.position.y + offset[1],
+          z: this.splatBaseTrs.position.z + offset[2],
+        },
+      });
+    }
+    const follow = options.followCamera ?? true;
+    if (!follow || !temporal.enabled || !temporal.cameras?.length) {
+      return;
+    }
+    const pose = interpolateCamera(temporal.cameras, temporal.currentTime);
+    if (!pose) {
+      return;
+    }
+    this.camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
+    this.controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
+    this.camera.lookAt(this.controls.target);
+    this.controls.update();
+  }
+
+  private applyRelight(relight: RelightJson): void {
+    const next: RelightJson = {
+      ...relight,
+      enabled: relight.enabled,
+      mode: relight.mode === 'unsupported' ? 'sh-env' : relight.mode,
+      azimuthDeg: relight.azimuthDeg ?? 45,
+      elevationDeg: relight.elevationDeg ?? 35,
+      intensity: relight.intensity ?? 1,
+    };
+    this.sceneManager.setRelight(next);
+    useViewerStore.getState().setRelight(next);
+    const params: RelightParams = {
+      enabled: next.enabled,
+      azimuthDeg: next.azimuthDeg ?? 45,
+      elevationDeg: next.elevationDeg ?? 35,
+      intensity: next.intensity ?? 1,
+    };
+    this.splatRenderer?.setRelight(params);
+    const rgb = relightRgb(params);
+    this.ambientLight.intensity = next.enabled ? 0.35 + params.intensity * 0.25 : 0.55;
+    this.keyLight.intensity = next.enabled ? 0.6 + params.intensity * 0.9 : 0.85;
+    this.keyLight.color.setRGB(rgb[0], rgb[1], rgb[2]);
+    const az = ((params.azimuthDeg ?? 45) * Math.PI) / 180;
+    const el = ((params.elevationDeg ?? 35) * Math.PI) / 180;
+    this.keyLight.position.set(
+      Math.cos(el) * Math.sin(az) * 10,
+      Math.sin(el) * 10,
+      Math.cos(el) * Math.cos(az) * 10,
+    );
   }
 
   private async loadSplatFromJob(jobId: string): Promise<void> {
@@ -690,11 +804,18 @@ export class ViewerController {
     if (!this.splatRenderer) {
       return;
     }
+    this.splatBaseTrs = createOpenCvToThreeTRS();
+    this.splatRenderer.setTRS(handle, this.splatBaseTrs);
     const root = asObject3D(this.sceneManager.root);
     if (root) {
       this.splatRenderer.addToScene(handle, root);
     }
     this.splatHandle = handle;
+    const maxSh = this.splatRenderer.capabilities.maxShDegree;
+    this.setQuality({ shDegree: toShDegree(Math.min(3, maxSh)) });
+    this.applyRelight(this.sceneManager.getState().relight);
+    this.applyTemporalPose(this.sceneManager.getState().temporal, { followCamera: false });
+    this.fitToSplat();
     useViewerStore
       .getState()
       .setHud({ gaussianCount: this.splatRenderer.getGaussianCount(handle) });
@@ -1013,6 +1134,10 @@ export class ViewerController {
     return end === 'a' || end === 'b' ? end : null;
   }
 
+  private onContextMenu = (event: Event): void => {
+    event.preventDefault();
+  };
+
   private onKeyDown = (event: KeyboardEvent): void => {
     const target = event.target;
     if (
@@ -1060,6 +1185,7 @@ export class ViewerController {
     this.canvas.addEventListener('pointerdown', this.onPointerDown);
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
+    this.canvas.addEventListener('contextmenu', this.onContextMenu);
     window.addEventListener('keydown', this.onKeyDown);
     this.resizeObserver = new ResizeObserver(() => this.fitRenderer());
     this.resizeObserver.observe(this.canvas.parentElement ?? this.canvas);

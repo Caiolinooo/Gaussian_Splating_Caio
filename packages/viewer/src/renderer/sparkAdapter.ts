@@ -22,7 +22,8 @@ import type { SplatFormat } from './SplatRenderer';
  * 3. `SplatFileType` pode aparecer como enum ou string conforme o build.
  *    Tentamos o enum e caímos no fileName `scene.{format}`.
  * 4. `scale` do SplatMesh é uniforme (média xyz) — TRS não-uniforme degrada.
- * 5. `play`/`pause` temporal não existe (Fase 6) — só flag no backend.
+ * 5. Tempo 4D: o controller aplica câmeras COLMAP + offset de clusters; Spark
+ *    `recolor` cobre relight SH-env (docs SplatMesh.recolor).
  */
 export interface SparkRendererLike {
   minAlpha?: number;
@@ -45,6 +46,13 @@ export interface SparkSplatMeshLike {
   numSplats?: number;
   maxSh?: number;
   updateGenerator?: () => void;
+  recolor?: { set(r: number, g: number, b: number): unknown; r?: number; g?: number; b?: number };
+  getBoundingBox?: (centersOnly?: boolean) => {
+    min: { x: number; y: number; z: number };
+    max: { x: number; y: number; z: number };
+  };
+  updateMatrixWorld?: (force?: boolean) => void;
+  matrixWorld?: { elements: ArrayLike<number> };
   raycast?: (raycaster: unknown, intersects: unknown[]) => void;
   dispose?: () => void;
   removeFromParent?: () => void;
@@ -116,6 +124,11 @@ export function createSparkSplatMesh(
     fileName: `scene.${options.format}`,
     maxSh: options.maxSh,
     raycastable: true,
+    editable: true,
+    lod: true,
+    nonLod: true,
+    enableLod: true,
+    lodScale: 1.25,
     onProgress: options.onProgress,
   });
 }

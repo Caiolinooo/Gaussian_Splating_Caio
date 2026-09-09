@@ -8,6 +8,7 @@ import {
   type JobDetail,
   type JobSummary,
 } from '../../lib/api';
+import { isAuthFailure } from '../../lib/sessionInvalidation';
 import {
   subscribeJobEvents,
   type EventsConnectionState,
@@ -68,6 +69,10 @@ export const useJobsStore = create<JobsStore>((set, get) => ({
       const jobs = await listJobs();
       set({ jobs, listLoading: false });
     } catch (error) {
+      if (error instanceof ApiError && isAuthFailure(error)) {
+        set({ listLoading: false, listError: null });
+        return;
+      }
       set({
         listError: errorMessage(error, 'Não foi possível carregar os jobs.'),
         listLoading: false,

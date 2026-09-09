@@ -12,6 +12,7 @@ from collections.abc import Callable
 from jobs.errors import InvalidTransition, JobCancelled, JobInterrupted
 from jobs.handlers import StageHandlers, StageOutcome, default_handlers
 from jobs.models import JobRecord, JobSpec, new_job_record, utcnow
+from jobs.quality import apply_quality_defaults
 from jobs.progress import ProgressEvent, ProgressSink, make_event
 from jobs.states import (
     STAGE_ORDER,
@@ -151,6 +152,31 @@ class JobMachine:
             else:
                 record.state = dest
                 record.updated_at = utcnow().isoformat()
+        self.store.save(record)
+        return record
+
+    def rebuild(self, job_id: str, from_stage: str = "sfm") -> JobRecord:
+        """Reabre um job concluído e reaplica defaults de qualidade a partir de ``from_stage``."""
+        if from_stage not in STAGE_ORDER:
+            raise ValueError(f"etapa inválida para rebuild: {from_stage}")
+        record = self.store.load(job_id)
+        apply_quality_defaults(record)
+        record.cancel_requested = False
+        record.error_code = None
+        record.error_message = None
+        record.tools.python = resolve_python_bin(record.tools.python)
+        index = STAGE_ORDER.index(from_stage)
+        for name in STAGE_ORDER[index:]:
+            stage = record.stages[name]
+            stage.status = StageStatus.PENDING
+            stage.progress = 0.0
+            stage.error_code = None
+            stage.error_message = None
+            stage.message = ""
+            stage.finished_at = None
+        record.last_completed_stage = STAGE_ORDER[index - 1] if index else None
+        record.state = stage_to_state(from_stage)
+        record.updated_at = utcnow().isoformat()
         self.store.save(record)
         return record
 

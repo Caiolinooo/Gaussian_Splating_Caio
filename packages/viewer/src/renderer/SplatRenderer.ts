@@ -48,9 +48,15 @@ export interface SplatQuality {
 }
 
 export const DEFAULT_SPLAT_QUALITY: SplatQuality = Object.freeze({
-  shDegree: 1,
+  shDegree: 3,
   alphaRemovalThreshold: 1,
 });
+
+/** AABB em espaço de mundo para enquadrar a câmera no splat. */
+export interface WorldBox {
+  min: Vec3;
+  max: Vec3;
+}
 
 export interface SplatPickOptions {
   /** Distância máxima do raio ao centro/hit (unidades de cena). */
@@ -134,25 +140,35 @@ export interface SplatRenderer {
 
   getQuality(): SplatQuality;
 
-  /** Reprodução temporal (Fase 6 / GIF). Sem treino 4DGS — só o relógio do contrato. */
+  /** Reprodução temporal 0–1 (scrubber 4D / câmeras COLMAP). */
   play(): void;
 
   pause(): void;
 
   isPlaying(): boolean;
 
-  /** Tempo normalizado 0–1 (scrubber). Backends sem 4D só guardam o valor. */
+  /** Tempo normalizado 0–1. Spark aplica offset de clusters via TRS no controller. */
   setTime(normalized: number): void;
 
   getTime(): number;
 
-  /** Preview de relight. `unsupported` no contrato até existir backend. */
+  /** Relight SH-env: `recolor` no Spark + estado no fallback WebGL2. */
   setRelightEnabled(enabled: boolean): void;
+
+  setRelight(params: {
+    enabled: boolean;
+    azimuthDeg: number;
+    elevationDeg: number;
+    intensity: number;
+  }): void;
 
   isRelightEnabled(): boolean;
 
   /** Contagem de gaussianas (de um splat ou soma de todos). */
   getGaussianCount(handle?: SplatHandle): number;
+
+  /** AABB em mundo do splat (ou do primeiro carregado). Null se ainda vazio. */
+  getWorldBounds(handle?: SplatHandle): WorldBox | null;
 
   /** Libera GPU, workers e object URLs. */
   dispose(): void;

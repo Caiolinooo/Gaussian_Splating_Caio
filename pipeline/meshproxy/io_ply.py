@@ -102,6 +102,20 @@ class GaussianCloud:
         return len(self.points)
 
 
+def ply_vertex_count(path: str | Path) -> int:
+    """Read only the PLY header and return the ``element vertex`` count."""
+    ply_path = Path(path)
+    try:
+        with ply_path.open("rb") as handle:
+            header = _parse_header(_read_header_lines(handle))
+    except OSError as exc:
+        raise invalid_ply(str(ply_path)) from exc
+    for element in header.elements:
+        if element.name == "vertex":
+            return element.count
+    return 0
+
+
 def read_gaussian_ply(path: str | Path) -> GaussianCloud:
     """Parse a 3DGS-style PLY and return Gaussian centres."""
     ply_path = Path(path)

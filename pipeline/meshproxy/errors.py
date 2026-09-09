@@ -48,6 +48,12 @@ NO_FACES_AFTER_CROP_USER = (
     "Reduza o percentil de densidade e tente de novo."
 )
 
+MESHPROXY_TOO_LARGE_USER = (
+    "A malha proxy foi pulada: o splat tem {n} gaussianas "
+    "(limite {limit} para o KNN em Python). "
+    "Overlays usam o fallback sem proxy.glb."
+)
+
 
 class MeshProxyError(Exception):
     """Recoverable proxy-mesh failure with an actionable pt-BR message."""
@@ -130,4 +136,12 @@ def no_faces_after_crop() -> MeshProxyError:
         "density crop removed every vertex",
         user_message=NO_FACES_AFTER_CROP_USER,
         code="EMPTY_MESH",
+    )
+
+
+def meshproxy_too_large(count: int, limit: int) -> MeshProxyError:
+    return MeshProxyError(
+        f"meshproxy cloud too large: {count} > {limit}",
+        user_message=MESHPROXY_TOO_LARGE_USER.format(n=count, limit=limit),
+        code="MESHPROXY_TOO_LARGE",
     )

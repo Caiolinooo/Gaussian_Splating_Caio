@@ -13,10 +13,7 @@ import {
 import { AppShell } from './components/AppShell';
 import { SetupScreen } from './components/SetupScreen';
 import { AUTH_PATHS, AuthRoute, useAuthStore } from './features/auth';
-import { CalibrationRoute } from './features/calibration';
-import { EditingRoute } from './features/editing';
 import { JobProgressRoute, JobsRoute, UploadRoute } from './features/jobs';
-import { OverlayRoute } from './features/overlays';
 import { ViewerRoute } from './features/viewer';
 import { usePageTitle } from './hooks/usePageTitle';
 import { titleForPath } from './lib/pageTitle';
@@ -84,34 +81,11 @@ function ViewerPage() {
   return <ViewerRoute jobId={jobId} sceneId={sceneId} />;
 }
 
-function EditingPage() {
+function LegacyToolRedirect({ tool }: { tool: 'edit' | 'tape' | 'overlay' }) {
   const [search] = useSearchParams();
-  return (
-    <EditingRoute
-      jobId={search.get('job') ?? search.get('jobId') ?? undefined}
-      sceneId={search.get('sceneId') ?? undefined}
-    />
-  );
-}
-
-function CalibrationPage() {
-  const [search] = useSearchParams();
-  return (
-    <CalibrationRoute
-      jobId={search.get('job') ?? search.get('jobId') ?? undefined}
-      sceneId={search.get('sceneId') ?? undefined}
-    />
-  );
-}
-
-function OverlayPage() {
-  const [search] = useSearchParams();
-  return (
-    <OverlayRoute
-      jobId={search.get('job') ?? search.get('jobId') ?? undefined}
-      sceneId={search.get('sceneId') ?? undefined}
-    />
-  );
+  const next = new URLSearchParams(search);
+  next.set('tool', tool);
+  return <Navigate to={`/viewer?${next.toString()}`} replace />;
 }
 
 export default function App() {
@@ -131,9 +105,9 @@ export default function App() {
           <Route path="/jobs/:id" element={<JobProgressPage />} />
           <Route path="/viewer" element={<ViewerPage />} />
           <Route path="/viewer/:jobId" element={<ViewerPage />} />
-          <Route path="/editing" element={<EditingPage />} />
-          <Route path="/calibration" element={<CalibrationPage />} />
-          <Route path="/overlays" element={<OverlayPage />} />
+          <Route path="/editing" element={<LegacyToolRedirect tool="edit" />} />
+          <Route path="/calibration" element={<LegacyToolRedirect tool="tape" />} />
+          <Route path="/overlays" element={<LegacyToolRedirect tool="overlay" />} />
         </Route>
         <Route path="*" element={<Navigate to="/jobs" replace />} />
       </Routes>

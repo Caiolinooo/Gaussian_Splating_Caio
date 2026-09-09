@@ -3,9 +3,9 @@
 Never fails the job: missing pose/depth backends degrade to a
 low-confidence identity result (same contract as the autocal service).
 
-``ColmapDepthProvider`` is a documented stub — COLMAP ``cameras.bin`` /
-depth maps are not parsed here. The autocal package already ships a
-heuristic camera-distance fallback used when SfM depth is unavailable.
+``ColmapDepthProvider`` samples sparse Z + f_y from COLMAP ``cameras.txt``,
+``images.txt`` and ``points3D.txt``. Sem modelo, devolve ``None`` e o
+serviço cai no heurístico.
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from autocal.colmap_depth import ColmapSparseDepth
+from autocal.depth import DepthSample
 from jobs.autocal import AutocalContext, AutocalResult
 
 LOGGER = logging.getLogger("pipeline.jobs.autocal_adapter")
@@ -24,18 +26,18 @@ _FALLBACK_MESSAGE = "Auto-calibração indisponível; use a trena no viewer para
 
 
 class ColmapDepthProvider:
-    """Documented stub for a future COLMAP-backed ``DepthProvider``.
+    """Depth esparsa COLMAP (paredes/chão sem LiDAR) para autocal."""
 
-    A real implementation would sample ``Z`` + ``f_y`` from ``cameras.bin``
-    and per-view depth maps, keyed by ingest/COLMAP image names.
+    def __init__(self, model_dir: Path | str | None = None) -> None:
+        self._sparse: ColmapSparseDepth | None = None
+        if model_dir:
+            path = Path(model_dir)
+            if path.is_dir():
+                self._sparse = ColmapSparseDepth(path)
 
-    ``sample_depth`` always returns ``None`` so callers that inject this
-    stub get the same path as ``depth_provider=None`` (no-depth warning).
-    Prefer ``HeuristicCameraDistanceProvider`` from ``autocal.depth`` until
-    COLMAP depth is wired.
-    """
-
-    is_heuristic = True
+    @property
+    def is_heuristic(self) -> bool:
+        return self._sparse is None
 
     def sample_depth(
         self,
@@ -44,9 +46,11 @@ class ColmapDepthProvider:
         y_norm: float,
         *,
         image_size: tuple[int, int] | None = None,
-    ) -> None:
-        del frame_id, x_norm, y_norm, image_size
-        return None
+    ) -> DepthSample | None:
+        del image_size
+        if self._sparse is None:
+            return None
+        return self._sparse.sample(frame_id, x_norm, y_norm)
 
     def person_height_scene_units(
         self,
@@ -54,9 +58,17 @@ class ColmapDepthProvider:
         crown_xy_norm: tuple[float, float],
         feet_xy_norm: tuple[float, float],
         image_size: tuple[int, int],
-    ) -> None:
-        del frame_id, crown_xy_norm, feet_xy_norm, image_size
-        return None
+    ) -> float | None:
+        width, height = image_size
+        if height <= 0 or width <= 0:
+            return None
+        mid_x = 0.5 * (crown_xy_norm[0] + feet_xy_norm[0])
+        mid_y = 0.5 * (crown_xy_norm[1] + feet_xy_norm[1])
+        sample = self.sample_depth(frame_id, mid_x, mid_y, image_size=image_size)
+        if sample is None or sample.focal_length_y_px <= 1e-9:
+            return None
+        pixel_height = abs(feet_xy_norm[1] - crown_xy_norm[1]) * float(height)
+        return pixel_height * sample.depth_scene_units / sample.focal_length_y_px
 
 
 def _fallback_result(*, warnings: list[str] | None = None) -> AutocalResult:
@@ -115,7 +127,7 @@ def _message_from_result(result: Any) -> str:
 
 
 class PipelineAutocal:
-    """Production ``AutocalHook``: pose service + heuristic depth, never raises."""
+    """Production ``AutocalHook``: pose + COLMAP depth, never raises."""
 
     def run(self, context: AutocalContext) -> AutocalResult:
         try:
@@ -136,7 +148,8 @@ class PipelineAutocal:
             )
 
         frames = _load_frames(Path(context.frames_dir))
-        depth = HeuristicCameraDistanceProvider()
+        colmap_depth = ColmapDepthProvider(context.colmap_model_dir or None)
+        depth = colmap_depth if not colmap_depth.is_heuristic else HeuristicCameraDistanceProvider()
         try:
             result = run_auto_calibration(
                 frames,

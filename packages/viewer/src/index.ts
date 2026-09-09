@@ -40,6 +40,7 @@ export {
   type SceneNodeJson,
   type SceneNodeKind,
   type SceneSchemaVersion,
+  type TemporalCameraJson,
   type TemporalJson,
   type TemporalSourceKind,
 } from './editing/sceneSchema';
@@ -96,6 +97,11 @@ export {
 export { MkKelloggBackend, type MkKelloggBackendHost } from './renderer/MkKelloggBackend';
 export { SparkBackend, type SparkBackendHost } from './renderer/SparkBackend';
 export {
+  createOpenCvToThreeTRS,
+  isIdentityQuat,
+  OPENCV_TO_THREE_QUAT,
+} from './renderer/splatFrame';
+export {
   assertSplatFormat,
   DEFAULT_SPLAT_QUALITY,
   mergeQuality,
@@ -115,6 +121,7 @@ export {
   type SplatQuality,
   type SplatRenderer,
   type SphericalHarmonicsDegree,
+  type WorldBox,
 } from './renderer/SplatRenderer';
 export {
   createFallbackUnitsPort,
@@ -123,3 +130,16 @@ export {
   type UnitsPort,
 } from './units-port';
 export { createUnitsBinding } from './unitsBinding';
+export {
+  DEFAULT_RELIGHT_PARAMS,
+  evaluateShRgb,
+  lightDirection,
+  relightRgb,
+  type RelightParams,
+} from './relight/shEnv';
+export {
+  clusterOffsetAt,
+  interpolateCamera,
+  interpolateOffsets,
+  type TemporalPose,
+} from './temporal/cameras';

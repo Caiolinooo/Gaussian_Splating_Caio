@@ -28,6 +28,8 @@ class JobMachineProtocol(Protocol):
 
     def retry(self, job_id: str) -> Any: ...
 
+    def rebuild(self, job_id: str, from_stage: str = "sfm") -> Any: ...
+
     def get(self, job_id: str) -> Any: ...
 
 
@@ -109,6 +111,11 @@ class JobSupervisor:
 
     def retry(self, job_id: str) -> Any:
         record = self.machine.retry(job_id)
+        self.dispatch(job_id)
+        return record
+
+    def rebuild(self, job_id: str, from_stage: str = "sfm") -> Any:
+        record = self.machine.rebuild(job_id, from_stage)
         self.dispatch(job_id)
         return record
 

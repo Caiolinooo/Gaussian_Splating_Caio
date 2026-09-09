@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -62,7 +63,10 @@ def ensure_data_factor_images(data_dir: Path, factor: int) -> Path | None:
         return dest
     if not images.exists():
         return None
-    dest.symlink_to(images, target_is_directory=True)
+    try:
+        dest.symlink_to(images, target_is_directory=True)
+    except OSError:
+        shutil.copytree(images, dest, dirs_exist_ok=True)
     LOGGER.info("event=train_images_factor src=%s dest=%s", images, dest)
     return dest
 

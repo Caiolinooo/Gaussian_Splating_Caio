@@ -57,3 +57,11 @@ temp/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# ─── Runtime do servidor (deploy local, contem segredos) ──────────────
+eval.env
+eval-*.pid
+eval-*.log
+
+# ─── Vendored repos (clones com .git proprio) ─────────────────────────
+vendor/gsplat-examples/

@@ -8,9 +8,6 @@ const NAV_ITEMS = [
   { to: '/jobs', label: 'Jobs' },
   { to: '/upload', label: 'Novo upload' },
   { to: '/viewer', label: 'Viewer' },
-  { to: '/editing', label: 'Edição' },
-  { to: '/calibration', label: 'Calibração' },
-  { to: '/overlays', label: 'Overlays' },
 ] as const;
 
 export function AppNav() {

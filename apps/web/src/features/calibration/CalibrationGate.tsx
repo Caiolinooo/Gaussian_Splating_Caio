@@ -23,7 +23,7 @@ export function CalibrationGate() {
       return null;
     case 'blocked':
       return (
-        <div className="gs-gate" role="dialog" aria-labelledby="gs-gate-blocked">
+        <div className="gs-gate gs-gate-corner" role="dialog" aria-labelledby="gs-gate-blocked">
           <h2 id="gs-gate-blocked">Cena ainda sem escala</h2>
           <p>
             Meça duas pontas com a trena e use como referência para trabalhar em metros, centímetros
@@ -36,6 +36,12 @@ export function CalibrationGate() {
               onClick={() => controller?.startManualCalibration()}
             >
               Abrir trena
+            </button>
+            <button
+              type="button"
+              onClick={() => useCalibrationStore.getState().setGatePhase('hidden')}
+            >
+              Continuar
             </button>
           </div>
         </div>
@@ -76,7 +82,7 @@ function AutoConfirmCard(props: {
 }) {
   const formatted = formatMeters(props.suggestedMeters, props.unit);
   return (
-    <div className="gs-gate" role="dialog" aria-labelledby="gs-gate-auto">
+    <div className="gs-gate gs-gate-corner" role="dialog" aria-labelledby="gs-gate-auto">
       <h2 id="gs-gate-auto">Confirmar auto-calibração</h2>
       <p>A distância entre estes pontos parece {formatted}?</p>
       {props.phase === 'adjust' && (

@@ -38,7 +38,9 @@ export function JobsListPage({ onOpenJob, onNewUpload, onOpenScene }: JobsListPa
         <div>
           <h1>Seus processamentos</h1>
           <p className="muted">Acompanhe o estado, o progresso e reabra cenas já concluídas.</p>
-          {user?.email && <p className="jobs-account">{user.email}</p>}
+          {(user?.email || user?.id) && (
+            <p className="jobs-account">{user.email ?? user.id}</p>
+          )}
         </div>
         <div className="jobs-toolbar">
           <button type="button" className="primary" onClick={onNewUpload}>

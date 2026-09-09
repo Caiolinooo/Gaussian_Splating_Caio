@@ -5,6 +5,24 @@ import { getLocalSession, localSessionAsSupabase } from './localAuth';
 const DEV_BYPASS_FLAG = '1';
 const DEV_BYPASS_TOKEN = 'dev-bypass';
 
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+/**
+ * Bypass só com `VITE_DEV_AUTH_BYPASS=1` **e** hostname loopback.
+ * Dist bakeado com flag 1 em vm.groupabz.com não vira `dev@localhost`.
+ */
+export function resolveDevAuthBypass(flag: string | undefined, hostname: string | undefined): boolean {
+  if (flag !== DEV_BYPASS_FLAG) {
+    return false;
+  }
+  if (!hostname) {
+    return false;
+  }
+  return isLoopbackHostname(hostname);
+}
+
 const DEV_BYPASS_USER = {
   id: 'dev-user',
   email: 'dev@localhost',
@@ -26,9 +44,10 @@ const DEV_BYPASS_SESSION = {
 let client: SupabaseClient | null = null;
 let clientInitError: string | null = null;
 
-/** True quando `VITE_DEV_AUTH_BYPASS=1` — AuthGuard libera e a API recebe Bearer de desenvolvimento. */
+/** True quando `VITE_DEV_AUTH_BYPASS=1` **e** a UI roda em localhost. */
 export function isDevAuthBypass(): boolean {
-  return import.meta.env.VITE_DEV_AUTH_BYPASS === DEV_BYPASS_FLAG;
+  const hostname = typeof window === 'undefined' ? undefined : window.location.hostname;
+  return resolveDevAuthBypass(import.meta.env.VITE_DEV_AUTH_BYPASS, hostname);
 }
 
 export function getSupabaseUrl(): string | undefined {

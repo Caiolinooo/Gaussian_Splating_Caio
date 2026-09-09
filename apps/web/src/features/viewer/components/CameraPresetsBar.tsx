@@ -11,6 +11,9 @@ export function CameraPresetsBar() {
 
   return (
     <div className="gs-presets" role="group" aria-label="Presets de câmera">
+      <button type="button" onClick={() => controller?.fitToSplat()}>
+        Enquadrar
+      </button>
       {PRESETS.map((preset) => (
         <button
           key={preset}

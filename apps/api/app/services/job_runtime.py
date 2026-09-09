@@ -81,12 +81,14 @@ class PipelineMachineAdapter:
             spec_kwargs["train"] = self._jobs.TrainConfig(
                 python_bin=tool_kwargs.get("python", "python"),
                 trainer_script=Path(tool_kwargs.get("simple_trainer", "simple_trainer.py")),
-                data_factor=int(getattr(train, "data_factor", 4)),
-                max_steps=int(getattr(train, "max_steps", 3500)),
-                save_steps=tuple(getattr(train, "save_steps", (3500,))),
-                eval_steps=tuple(getattr(train, "eval_steps", (3500,))),
-                ply_steps=tuple(getattr(train, "ply_steps", (3500,))),
-                extra_args=tuple(getattr(train, "extra_args", ())),
+                data_factor=int(getattr(train, "data_factor", 2)),
+                max_steps=int(getattr(train, "max_steps", 30_000)),
+                save_steps=tuple(getattr(train, "save_steps", (15_000, 30_000))),
+                eval_steps=tuple(getattr(train, "eval_steps", (30_000,))),
+                ply_steps=tuple(getattr(train, "ply_steps", (15_000, 30_000))),
+                extra_args=tuple(
+                    getattr(train, "extra_args", ("--sh_degree", "3", "--scale_reg", "0.01", "--opacity_reg", "0.01"))
+                ),
             )
         colmap = getattr(spec, "colmap", None)
         if colmap is not None and hasattr(self._jobs, "ColmapConfig"):
@@ -96,7 +98,7 @@ class PipelineMachineAdapter:
                 use_gpu=bool(getattr(colmap, "use_gpu", True)),
                 min_registered_ratio=float(getattr(colmap, "min_registered_ratio", 0.70)),
                 min_registered_count=int(getattr(colmap, "min_registered_count", 20)),
-                max_exhaustive_images=int(getattr(colmap, "max_exhaustive_images", 80)),
+                max_exhaustive_images=int(getattr(colmap, "max_exhaustive_images", 220)),
             )
         return self._jobs.JobSpec(**spec_kwargs)
 
@@ -117,6 +119,9 @@ class PipelineMachineAdapter:
 
     def retry(self, job_id: str) -> Any:
         return self._wrap_lookup(job_id, self._inner.retry)
+
+    def rebuild(self, job_id: str, from_stage: str = "sfm") -> Any:
+        return self._wrap_lookup(job_id, lambda jid: self._inner.rebuild(jid, from_stage))
 
     def get(self, job_id: str) -> Any:
         return self._wrap_lookup(job_id, self._inner.get)
@@ -181,13 +186,14 @@ def tool_paths_from_settings(settings: Settings) -> Any:
 def train_from_settings(settings: Settings) -> Any:
     steps = int(settings.train_max_steps)
     degree = int(settings.train_sh_degree)
+    mid = min(7_000, steps)
     return SimpleNamespace(
         data_factor=int(settings.train_data_factor),
         max_steps=steps,
-        save_steps=(steps,),
+        save_steps=(mid, steps) if mid < steps else (steps,),
         eval_steps=(steps,),
-        ply_steps=(steps,),
-        extra_args=("--sh_degree", str(degree)),
+        ply_steps=(mid, steps) if mid < steps else (steps,),
+        extra_args=("--sh_degree", str(degree), "--scale_reg", "0.01", "--opacity_reg", "0.01"),
     )
 
 

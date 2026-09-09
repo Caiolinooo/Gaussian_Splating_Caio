@@ -17,8 +17,8 @@ SUPPORTED_VIDEO_SUFFIXES: frozenset[str] = frozenset(
 class VideoIngestConfig:
     """Adaptive frame extraction + quality filters."""
 
-    target_min_frames: int = 150
-    target_max_frames: int = 180
+    target_min_frames: int = 180
+    target_max_frames: int = 220
     oversample: float = 1.15
     blur_threshold: float = 80.0
     relaxed_blur_threshold: float = 40.0
@@ -27,7 +27,7 @@ class VideoIngestConfig:
     dedup_threshold: float = 1.0
     relaxed_dedup_threshold: float = 0.5
     min_keep_frames: int = 8
-    max_edge_px: int = 1280
+    max_edge_px: int = 1600
     jpeg_quality: int = 2
     min_width: int = 640
     min_height: int = 480

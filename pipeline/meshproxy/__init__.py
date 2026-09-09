@@ -24,7 +24,7 @@ from .filtering import (
     knn_neighbors,
     opacity_sigmoid,
 )
-from .io_ply import GaussianCloud, read_gaussian_ply
+from .io_ply import GaussianCloud, ply_vertex_count, read_gaussian_ply
 from .reconstruct import (
     PreparedCloud,
     ProxyBuildResult,
@@ -55,6 +55,7 @@ __all__ = [
     "make_stage_result",
     "meshproxy_stage",
     "opacity_sigmoid",
+    "ply_vertex_count",
     "prepare_cloud",
     "read_gaussian_ply",
 ]

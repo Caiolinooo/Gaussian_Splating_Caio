@@ -3,15 +3,28 @@ import { describe, expect, it } from 'vitest';
 import { apiConnectionErrorMessage, isLoopbackApiUrl, resolveApiBaseUrl } from './api';
 
 describe('resolveApiBaseUrl', () => {
-  it('no Vite :5173 usa VITE_API_URL ou localhost:8000', () => {
+  it('no Vite :5173 sem origem cai em localhost:8000', () => {
     expect(resolveApiBaseUrl({ port: '5173' })).toBe('http://localhost:8000');
+  });
+
+  it('no Vite :5173 com origem usa same-origin (proxy do Vite)', () => {
     expect(
       resolveApiBaseUrl({
         envUrl: 'http://localhost:8000/',
         origin: 'http://localhost:5173',
         port: '5173',
       }),
-    ).toBe('http://localhost:8000');
+    ).toBe('http://localhost:5173');
+  });
+
+  it('no Vite :5173 respeita API remota explícita', () => {
+    expect(
+      resolveApiBaseUrl({
+        envUrl: 'http://vm.groupabz.com:2222',
+        origin: 'http://localhost:5173',
+        port: '5173',
+      }),
+    ).toBe('http://vm.groupabz.com:2222');
   });
 
   it('build servido na API ignora localhost:8000 e usa a origem da página', () => {

@@ -1,4 +1,11 @@
+import * as THREE from 'three';
+
 import { cloneTRS, createTRS, IDENTITY_TRS, type TRS } from '../math/trs';
+import {
+  DEFAULT_RELIGHT_PARAMS,
+  relightRgb,
+  type RelightParams,
+} from '../relight/shEnv';
 import { pickClosestSplatCenter } from '../picking/splatCenters';
 import type { BackendDetection } from './detectBackend';
 import {
@@ -22,6 +29,7 @@ import {
   type SplatPickOptions,
   type SplatQuality,
   type SplatRenderer,
+  type WorldBox,
 } from './SplatRenderer';
 
 export interface MkKelloggBackendHost {
@@ -50,14 +58,14 @@ export class MkKelloggBackend implements SplatRenderer {
   private quality: SplatQuality;
   private playing = false;
   private time = 0;
-  private relightEnabled = false;
+  private relight: RelightParams = { ...DEFAULT_RELIGHT_PARAMS };
   private disposed = false;
   private nextIndex = 0;
   private viewerParent: SceneParent | null = null;
 
   constructor(host: MkKelloggBackendHost, detection: BackendDetection) {
     this.host = host;
-    this.quality = { ...DEFAULT_SPLAT_QUALITY, shDegree: 1 };
+    this.quality = { ...DEFAULT_SPLAT_QUALITY, shDegree: 2 };
     const mod = getMkKelloggModule();
     this.viewer = createDropInViewer(mod, {
       dynamicScene: true,
@@ -194,11 +202,26 @@ export class MkKelloggBackend implements SplatRenderer {
   }
 
   setRelightEnabled(enabled: boolean): void {
-    this.relightEnabled = enabled;
+    this.setRelight({ ...this.relight, enabled });
+  }
+
+  setRelight(params: RelightParams): void {
+    this.relight = {
+      enabled: params.enabled,
+      azimuthDeg: params.azimuthDeg,
+      elevationDeg: params.elevationDeg,
+      intensity: params.intensity,
+    };
+    const rgb = relightRgb(this.relight);
+    for (const entry of this.entries.values()) {
+      const color = (entry.scene as { color?: { set(r: number, g: number, b: number): unknown } })
+        .color;
+      color?.set(rgb[0], rgb[1], rgb[2]);
+    }
   }
 
   isRelightEnabled(): boolean {
-    return this.relightEnabled;
+    return this.relight.enabled;
   }
 
   getGaussianCount(handle?: SplatHandle): number {
@@ -209,6 +232,24 @@ export class MkKelloggBackend implements SplatRenderer {
       return this.viewer.getSplatCount();
     }
     return this.viewer.splatMesh?.getSplatCount?.() ?? 0;
+  }
+
+  getWorldBounds(handle?: SplatHandle): WorldBox | null {
+    const entry = handle ? this.entries.get(handle.id) : this.entries.values().next().value;
+    const target = entry?.scene ?? this.viewer;
+    const object = target as unknown as THREE.Object3D;
+    if (!object || typeof object.updateMatrixWorld !== 'function') {
+      return null;
+    }
+    object.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(object);
+    if (box.isEmpty()) {
+      return null;
+    }
+    return {
+      min: { x: box.min.x, y: box.min.y, z: box.min.z },
+      max: { x: box.max.x, y: box.max.y, z: box.max.z },
+    };
   }
 
   dispose(): void {

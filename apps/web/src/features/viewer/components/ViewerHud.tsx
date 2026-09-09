@@ -16,6 +16,9 @@ export function ViewerHud() {
   const relight = useViewerStore((state) => state.relight);
 
   const badge = backendBadge(backend?.backend ?? 'none', backend?.webgpu === true);
+  const azimuth = relight.azimuthDeg ?? 45;
+  const elevation = relight.elevationDeg ?? 35;
+  const intensity = relight.intensity ?? 1;
 
   return (
     <div className="gs-hud" aria-label="Informações do viewer">
@@ -30,6 +33,9 @@ export function ViewerHud() {
         title="Alternar grau de spherical harmonics"
       >
         SH {quality.shDegree}
+      </button>
+      <button type="button" onClick={() => controller?.fitToSplat()}>
+        Enquadrar
       </button>
       {memoryMb !== null && <span>{memoryMb.toFixed(0)} MB</span>}
       {temporal.enabled && (
@@ -50,14 +56,51 @@ export function ViewerHud() {
           </span>
         </label>
       )}
-      <label className="gs-relight" title="Contrato futuro — treino 4DGS/relight ainda não existe">
+      <label className="gs-relight">
         <input
           type="checkbox"
           checked={relight.enabled}
-          disabled={relight.mode === 'unsupported'}
+          aria-label="Relight"
           onChange={(event) => controller?.setRelightPreview(event.target.checked)}
         />
         Relight ({relight.mode})
+      </label>
+      <label className="gs-relight">
+        Azimute
+        <input
+          type="range"
+          min={0}
+          max={360}
+          value={Math.round(azimuth)}
+          aria-label="Azimute do relight"
+          onChange={(event) => controller?.setRelightEnv({ azimuthDeg: Number(event.target.value) })}
+        />
+      </label>
+      <label className="gs-relight">
+        Elevação
+        <input
+          type="range"
+          min={-10}
+          max={89}
+          value={Math.round(elevation)}
+          aria-label="Elevação do relight"
+          onChange={(event) =>
+            controller?.setRelightEnv({ elevationDeg: Number(event.target.value) })
+          }
+        />
+      </label>
+      <label className="gs-relight">
+        Intensidade
+        <input
+          type="range"
+          min={0}
+          max={200}
+          value={Math.round(intensity * 100)}
+          aria-label="Intensidade do relight"
+          onChange={(event) =>
+            controller?.setRelightEnv({ intensity: Number(event.target.value) / 100 })
+          }
+        />
       </label>
       <CalibrationIndicator />
     </div>

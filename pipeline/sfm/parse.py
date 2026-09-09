@@ -134,7 +134,7 @@ def list_sparse_models(sparse_dir: Path) -> tuple[Path, ...]:
 
 
 def score_reconstruction(model_dir: Path) -> tuple[int, int]:
-    """`(registered_images, points3D)` — larger tuple wins."""
+    """`(registered_images, points3D)`."""
     images_txt = model_dir / "images.txt"
     registered = len(parse_images_txt_file(images_txt)) if images_txt.is_file() else 0
     points_txt = model_dir / "points3D.txt"
@@ -145,13 +145,19 @@ def score_reconstruction(model_dir: Path) -> tuple[int, int]:
     return (registered, points)
 
 
+def rank_reconstruction(cameras: int, points: int) -> tuple[int, int, int]:
+    """Structure first: 54 cams / 37 pts lose to 52 cams / 4066 pts."""
+    structured = 1 if points >= max(200, cameras * 8) else 0
+    return (structured, cameras, points)
+
+
 def pick_largest_model(sparse_dir: Path) -> Path | None:
-    """Prefer the reconstruction with most cameras, then most 3D points."""
-    scored: list[tuple[tuple[int, int], Path]] = []
+    """Prefer a triangulated model. Degenerate (few points) loses even with more cameras."""
+    scored: list[tuple[tuple[int, int, int], Path]] = []
     for model in list_sparse_models(sparse_dir):
-        score = score_reconstruction(model)
-        if score[0] > 0:
-            scored.append((score, model))
+        cameras, points = score_reconstruction(model)
+        if cameras > 0:
+            scored.append((rank_reconstruction(cameras, points), model))
     if scored:
         return max(scored, key=lambda item: item[0])[1]
     models = list_sparse_models(sparse_dir)

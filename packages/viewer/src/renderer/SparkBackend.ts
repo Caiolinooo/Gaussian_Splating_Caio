@@ -10,6 +10,11 @@ import {
   type SparkSplatMeshLike,
 } from './sparkAdapter';
 import {
+  DEFAULT_RELIGHT_PARAMS,
+  relightRgb,
+  type RelightParams,
+} from '../relight/shEnv';
+import {
   DEFAULT_SPLAT_QUALITY,
   mergeQuality,
   resolveLoadUrl,
@@ -23,6 +28,7 @@ import {
   type SplatPickOptions,
   type SplatQuality,
   type SplatRenderer,
+  type WorldBox,
 } from './SplatRenderer';
 
 export interface SparkBackendHost {
@@ -52,7 +58,7 @@ export class SparkBackend implements SplatRenderer {
   private quality: SplatQuality;
   private playing = false;
   private time = 0;
-  private relightEnabled = false;
+  private relight: RelightParams = { ...DEFAULT_RELIGHT_PARAMS };
   private disposed = false;
 
   constructor(host: SparkBackendHost, detection: BackendDetection) {
@@ -105,6 +111,7 @@ export class SparkBackend implements SplatRenderer {
     const trs = createTRS(options.trs);
     applyMeshTRS(mesh, trs);
     this.entries.set(handle.id, { handle, mesh, trs, parent: null, objectUrl: url });
+    this.applyRecolor();
     return handle;
   }
 
@@ -213,11 +220,21 @@ export class SparkBackend implements SplatRenderer {
   }
 
   setRelightEnabled(enabled: boolean): void {
-    this.relightEnabled = enabled;
+    this.setRelight({ ...this.relight, enabled });
+  }
+
+  setRelight(params: RelightParams): void {
+    this.relight = {
+      enabled: params.enabled,
+      azimuthDeg: params.azimuthDeg,
+      elevationDeg: params.elevationDeg,
+      intensity: params.intensity,
+    };
+    this.applyRecolor();
   }
 
   isRelightEnabled(): boolean {
-    return this.relightEnabled;
+    return this.relight.enabled;
   }
 
   getGaussianCount(handle?: SplatHandle): number {
@@ -229,6 +246,14 @@ export class SparkBackend implements SplatRenderer {
       total += entry.mesh.numSplats ?? 0;
     }
     return total;
+  }
+
+  getWorldBounds(handle?: SplatHandle): WorldBox | null {
+    const entry = handle ? this.entries.get(handle.id) : firstEntry(this.entries);
+    if (!entry) {
+      return null;
+    }
+    return worldBoxFromSparkMesh(entry.mesh) ?? worldBoxFromCenters(entry.mesh);
   }
 
   dispose(): void {
@@ -248,6 +273,13 @@ export class SparkBackend implements SplatRenderer {
       URL.revokeObjectURL(url);
     }
     this.objectUrls.length = 0;
+  }
+
+  private applyRecolor(): void {
+    const rgb = relightRgb(this.relight);
+    for (const entry of this.entries.values()) {
+      entry.mesh.recolor?.set(rgb[0], rgb[1], rgb[2]);
+    }
   }
 
   private applyMinAlpha(): void {
@@ -291,6 +323,65 @@ export class SparkBackend implements SplatRenderer {
       throw new Error('SparkBackend já foi disposed.');
     }
   }
+}
+
+function firstEntry<T>(entries: Map<string, T>): T | undefined {
+  return entries.values().next().value;
+}
+
+function worldBoxFromSparkMesh(mesh: SparkSplatMeshLike): WorldBox | null {
+  if (!mesh.getBoundingBox) {
+    return null;
+  }
+  try {
+    const box = mesh.getBoundingBox(true);
+    return applyMeshWorld(mesh, box.min, box.max);
+  } catch {
+    return null;
+  }
+}
+
+function worldBoxFromCenters(mesh: SparkSplatMeshLike): WorldBox | null {
+  if (!mesh.forEachSplat) {
+    return null;
+  }
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+  mesh.forEachSplat((_index, center) => {
+    minX = Math.min(minX, center.x);
+    minY = Math.min(minY, center.y);
+    minZ = Math.min(minZ, center.z);
+    maxX = Math.max(maxX, center.x);
+    maxY = Math.max(maxY, center.y);
+    maxZ = Math.max(maxZ, center.z);
+  });
+  if (!Number.isFinite(minX)) {
+    return null;
+  }
+  return applyMeshWorld(mesh, { x: minX, y: minY, z: minZ }, { x: maxX, y: maxY, z: maxZ });
+}
+
+function applyMeshWorld(
+  mesh: SparkSplatMeshLike,
+  min: { x: number; y: number; z: number },
+  max: { x: number; y: number; z: number },
+): WorldBox {
+  mesh.updateMatrixWorld?.(true);
+  const box = new THREE.Box3(
+    new THREE.Vector3(min.x, min.y, min.z),
+    new THREE.Vector3(max.x, max.y, max.z),
+  );
+  if (mesh.matrixWorld) {
+    box.applyMatrix4(new THREE.Matrix4().fromArray(Array.from(mesh.matrixWorld.elements)));
+  }
+  return {
+    min: { x: box.min.x, y: box.min.y, z: box.min.z },
+    max: { x: box.max.x, y: box.max.y, z: box.max.z },
+  };
 }
 
 function applyMeshTRS(mesh: SparkSplatMeshLike, trs: TRS): void {

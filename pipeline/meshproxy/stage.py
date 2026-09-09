@@ -56,13 +56,15 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, TypedDict
 
-from .errors import missing_ply
+from ._deps import AVAILABLE
+from .errors import BackendUnavailableError, meshproxy_too_large, missing_ply
 from .filtering import (
     DEFAULT_DENSITY_PERCENTILE,
     DEFAULT_KNN_K,
     DEFAULT_OPACITY_THRESHOLD,
     DEFAULT_STD_RATIO,
 )
+from .io_ply import ply_vertex_count
 from .reconstruct import (
     DEFAULT_MIN_POINTS,
     DEFAULT_POISSON_DEPTH,
@@ -76,6 +78,8 @@ LOGGER = logging.getLogger("pipeline.meshproxy")
 MASTER_PLY_REL = Path("export") / "master.ply"
 OUTPUT_GLB_REL = Path("export") / "proxy.glb"
 TRAIN_PLY_GLOB = "train/ply/point_cloud_*.ply"
+# Stdlib KNN on a full 3DGS cloud hangs the job worker for hours.
+MAX_MESHPROXY_VERTICES = 40_000
 
 ProgressFn = Callable[[float, str], None]
 
@@ -187,6 +191,11 @@ def meshproxy_stage(
     )
     _report(ctx, 0.05, "Localizando o .ply mestre…")
     ply_path = resolve_master_ply(ctx)
+    vertex_count = ply_vertex_count(ply_path)
+    if vertex_count > MAX_MESHPROXY_VERTICES:
+        raise meshproxy_too_large(vertex_count, MAX_MESHPROXY_VERTICES)
+    if not AVAILABLE:
+        raise BackendUnavailableError()
     out_glb = resolve_out_glb(ctx)
     _report(ctx, 0.15, "Limpando a nuvem de gaussianas…")
     LOGGER.info("event=meshproxy_start ply=%s out=%s", ply_path, out_glb)

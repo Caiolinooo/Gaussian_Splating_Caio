@@ -43,10 +43,10 @@ DEFAULT_TEMPORAL: TemporalDocument = {
 }
 
 DEFAULT_RELIGHT: RelightDocument = {
-    "enabled": False,
-    "mode": "unsupported",
+    "enabled": True,
+    "mode": "sh-env",
     "hasSphericalHarmonics": True,
-    "shDegree": 2,
+    "shDegree": 3,
 }
 
 DEFAULT_CALIBRATION: dict[str, Any] = {
@@ -73,10 +73,10 @@ def default_temporal() -> TemporalDocument:
 
 def default_relight() -> RelightDocument:
     return {
-        "enabled": False,
-        "mode": "unsupported",
+        "enabled": True,
+        "mode": "sh-env",
         "hasSphericalHarmonics": True,
-        "shDegree": 2,
+        "shDegree": 3,
     }
 
 

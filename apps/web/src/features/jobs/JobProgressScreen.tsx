@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { getApiBaseUrl, getAuthHeaders } from '../../lib/api';
+import { getApiBaseUrl, getAuthHeaders, rebuildJob } from '../../lib/api';
 import type { EventsConnectionState } from '../../lib/events';
 import { explainJobError } from './errorCatalog';
 import { useJobsStore } from './jobsStore';
@@ -58,6 +58,7 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
   } = useJobsStore();
   const [logOpen, setLogOpen] = useState(false);
   const [techLogError, setTechLogError] = useState<string | null>(null);
+  const [rebuildBusy, setRebuildBusy] = useState(false);
   const [startedAt] = useState(() => Date.now());
 
   useEffect(() => {
@@ -100,6 +101,19 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
   const etaLabel = job ? remainingEtaLabel(job.state, etaSeconds) : null;
   const explained =
     job?.state === 'error' ? explainJobError(job.error_code, job.error_message) : null;
+
+  async function rebuildQuality() {
+    setRebuildBusy(true);
+    setTechLogError(null);
+    try {
+      await rebuildJob(jobId, 'sfm');
+      subscribe(jobId);
+    } catch (error) {
+      setTechLogError(error instanceof Error ? error.message : 'Falha ao reconstruir o job.');
+    } finally {
+      setRebuildBusy(false);
+    }
+  }
 
   function openScene() {
     const sceneId = job?.scene_id ?? null;
@@ -185,7 +199,7 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
             Job {jobId}
             {job ? ` · ${jobStateLabel(job.state)}` : ''}
             {' · '}
-            caminho rápido L4: ingestão + SfM + ~3500 passos (cerca de 15–25 min)
+            qualidade L4: ingestão + SfM exhaustive + ~15000 passos (cerca de 40–90 min)
           </p>
           <p className={connection === 'live' ? 'jobs-connection is-live' : 'jobs-connection'}>
             {connectionLabel(connection, job?.state)}
@@ -204,6 +218,9 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
             <>
               <button type="button" className="primary" onClick={openScene}>
                 Abrir cena
+              </button>
+              <button type="button" disabled={rebuildBusy} onClick={() => void rebuildQuality()}>
+                {rebuildBusy ? 'Reconstruindo…' : 'Reconstruir qualidade'}
               </button>
               <button
                 type="button"

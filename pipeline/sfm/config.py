@@ -22,11 +22,11 @@ class ColmapConfig:
     camera_model: CameraModel = "SIMPLE_RADIAL"
     single_camera: bool = True
     use_gpu: bool = True
-    sequential_overlap: int = 12
+    sequential_overlap: int = 20
     sequential_quadratic_overlap: bool = True
     min_registered_ratio: float = 0.70
     min_registered_count: int = 20
-    max_exhaustive_images: int = 80
+    max_exhaustive_images: int = 220
     timeout_s: float | None = None
     # NÃO use max_num_models=1: no job 0284bca6 o primeiro modelo era lixo
     # (5 câmeras) e o útil era sparse/3 (90). O runner promove o maior.
@@ -34,11 +34,9 @@ class ColmapConfig:
     mapper_max_num_models: int = 8
     mapper_init_num_trials: int = 25
     mapper_ba_global_max_num_iterations: int = 25
-    # Ajustes opcionais de SIFT (usados pela tentativa de resgate em cenas
-    # de pouca textura). None = default do COLMAP.
-    sift_peak_threshold: float | None = None
-    sift_edge_threshold: float | None = None
-    sift_max_num_features: int | None = None
+    sift_peak_threshold: float | None = 0.004
+    sift_edge_threshold: float | None = 10.0
+    sift_max_num_features: int | None = 8192
 
     def __post_init__(self) -> None:
         if not 0.0 < self.min_registered_ratio <= 1.0:
@@ -63,9 +61,11 @@ class ColmapConfig:
     ) -> Literal["exhaustive", "sequential"]:
         if self.matcher != "auto":
             return self.matcher
-        if source_kind == "video":
+        if image_count is not None and image_count >= 2:
+            if image_count <= self.max_exhaustive_images:
+                return "exhaustive"
             return "sequential"
-        if image_count is not None and image_count > self.max_exhaustive_images:
+        if source_kind == "video":
             return "sequential"
         return "exhaustive"
 

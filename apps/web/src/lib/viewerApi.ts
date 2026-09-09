@@ -32,6 +32,7 @@ import type { OverlayDocument } from '@gs/overlays';
 import { parseSceneDocument, type CalibrationJson, type SceneDocument } from '@gs/viewer';
 
 import { getApiBaseUrl } from './api';
+import { invalidateClientSession } from './sessionInvalidation';
 import { getAccessToken, isDevAuthBypass } from './supabase';
 
 export function getViewerApiBaseUrl(): string {
@@ -99,6 +100,12 @@ async function authHeaders(): Promise<HeadersInit> {
     headers.Authorization = 'Bearer dev-bypass';
   }
   return headers;
+}
+
+function dropSessionIfUnauthorized(status: number): void {
+  if (status === 401) {
+    invalidateClientSession();
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -217,6 +224,7 @@ export async function fetchJobArtifact(
     throw new ViewerApiError(MISSING_SPLAT_USER_MESSAGE, path, 404);
   }
   if (!response.ok) {
+    dropSessionIfUnauthorized(response.status);
     const detail = await readErrorDetail(
       response,
       `Erro ${response.status} ao baixar o artefato ${kind}.`,
@@ -291,6 +299,7 @@ export async function fetchJobSceneDocument(
     return null;
   }
   if (!response.ok) {
+    dropSessionIfUnauthorized(response.status);
     const detail = await readErrorDetail(response, `Erro ${response.status} ao baixar a cena.`);
     throw new ViewerApiError(detail, path, response.status);
   }
@@ -306,6 +315,7 @@ export async function downloadJobPackage(jobId: string): Promise<void> {
   const url = `${getViewerApiBaseUrl()}${path}`;
   const response = await fetch(url, { headers: { ...(await authHeaders()) } });
   if (!response.ok) {
+    dropSessionIfUnauthorized(response.status);
     throw new ViewerApiError('Pacote de cena ainda não disponível.', path, response.status);
   }
   const blob = await response.blob();
@@ -337,6 +347,7 @@ export async function fetchScene(
     return null;
   }
   if (!response.ok) {
+    dropSessionIfUnauthorized(response.status);
     const detail = await readErrorDetail(response, `Erro ${response.status} ao abrir a cena.`);
     throw new ViewerApiError(detail, path, response.status);
   }
@@ -365,6 +376,7 @@ export async function putScene(
     throw new ViewerApiError('Não foi possível conectar à API para salvar a cena.', path);
   }
   if (!response.ok) {
+    dropSessionIfUnauthorized(response.status);
     const detail = await readErrorDetail(response, `Erro ${response.status} ao salvar a cena.`);
     throw new ViewerApiError(detail, path, response.status);
   }

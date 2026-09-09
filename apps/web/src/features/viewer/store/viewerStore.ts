@@ -2,7 +2,7 @@ import type { BackendDetection, RelightJson, SplatQuality, TemporalJson } from '
 import { DEFAULT_RELIGHT, DEFAULT_SPLAT_QUALITY, DEFAULT_TEMPORAL } from '@gs/viewer';
 import { create } from 'zustand';
 
-import type { CameraPreset } from '../types';
+import type { CameraPreset, WorkspaceTool } from '../types';
 
 export type LoadPhase = 'idle' | 'scene' | 'artifact' | 'splat' | 'ready' | 'error';
 
@@ -20,6 +20,7 @@ export interface ViewerStore {
   backend: BackendDetection | null;
   quality: SplatQuality;
   cameraPreset: CameraPreset;
+  workspaceTool: WorkspaceTool;
   dirty: boolean;
   saving: boolean;
   lastSavedAt: number | null;
@@ -33,6 +34,7 @@ export interface ViewerStore {
   setBackend: (backend: BackendDetection | null) => void;
   setQuality: (quality: Partial<SplatQuality>) => void;
   setCameraPreset: (preset: CameraPreset) => void;
+  setWorkspaceTool: (tool: WorkspaceTool) => void;
   markDirty: (dirty?: boolean) => void;
   setSaving: (saving: boolean) => void;
   markSaved: () => void;
@@ -54,6 +56,7 @@ export const useViewerStore = create<ViewerStore>((set) => ({
   backend: null,
   quality: { ...DEFAULT_SPLAT_QUALITY },
   cameraPreset: 'iso',
+  workspaceTool: 'orbit',
   dirty: false,
   saving: false,
   lastSavedAt: null,
@@ -91,6 +94,9 @@ export const useViewerStore = create<ViewerStore>((set) => ({
   },
   setCameraPreset(preset) {
     set({ cameraPreset: preset });
+  },
+  setWorkspaceTool(tool) {
+    set({ workspaceTool: tool });
   },
   markDirty(dirty = true) {
     set({ dirty });

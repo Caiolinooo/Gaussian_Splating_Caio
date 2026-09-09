@@ -15,6 +15,7 @@ class AutocalContext:
     frames_dir: str
     user_height_m: float
     registered_names: tuple[str, ...]
+    colmap_model_dir: str = ""
 
 
 @dataclass(frozen=True)

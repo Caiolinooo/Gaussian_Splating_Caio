@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from export.config import ExportConfig
+from geom.planes import densify_points3d_txt
 from ingest.config import ToolBins
 from jobs.autocal import AutocalContext, AutocalHook, AutocalResult
 from jobs.autocal_adapter import PipelineAutocal
@@ -18,10 +20,14 @@ from jobs.paths import JobPaths, job_paths
 from jobs.runner import CommandRunner, SubprocessRunner
 from jobs.states import SourceKind
 from provisioner.bins import resolve_python_bin
+from relight.sh_env import build_relight_env, write_relight_document
 from sceneio.detect import skips_reconstruction
 from sceneio.export import export_scene, refresh_scene_calibration
 from sceneio.ingest import ingest_scene
+from sfm.commands import build_model_converter_bin_command
 from sfm.config import ColmapConfig, ColmapPaths
+from temporal.clusters import build_temporal_scene, write_temporal_document
+from temporal.flow_rigs import write_4dgs_npz
 
 try:
     from meshproxy.errors import BackendUnavailableError, MeshProxyError
@@ -34,6 +40,8 @@ from sfm.runner import run_sfm
 from train.commands import latest_ply
 from train.config import TrainConfig, resolve_eval_train_steps
 from train.runner import run_training
+
+LOGGER = logging.getLogger("pipeline.jobs.handlers")
 
 
 @dataclass(frozen=True)
@@ -143,6 +151,9 @@ def handle_sfm(record: JobRecord, progress: Callable[[float, str], None], runner
         mapper_max_num_models=record.colmap.mapper_max_num_models,
         mapper_init_num_trials=record.colmap.mapper_init_num_trials,
         mapper_ba_global_max_num_iterations=record.colmap.mapper_ba_global_max_num_iterations,
+        sift_peak_threshold=record.colmap.sift_peak_threshold,
+        sift_edge_threshold=record.colmap.sift_edge_threshold,
+        sift_max_num_features=record.colmap.sift_max_num_features,
     )
     result = run_sfm(
         colmap_cfg,
@@ -152,6 +163,15 @@ def handle_sfm(record: JobRecord, progress: Callable[[float, str], None], runner
         progress=progress,
     )
     _relink(paths.dataset_dir / "sparse", paths.colmap_sparse)
+    prior = {"input_points": 0, "planes": 0, "added": 0}
+    points_txt = Path(result.model_dir) / "points3D.txt"
+    if points_txt.is_file():
+        prior = densify_points3d_txt(points_txt)
+        if prior.get("added", 0) > 0:
+            try:
+                runner.run(build_model_converter_bin_command(colmap_cfg, Path(result.model_dir)))
+            except Exception:
+                LOGGER.warning("event=points3d_bin_convert_failed model=%s", result.model_dir)
     return StageOutcome(
         artifacts={
             "model_dir": str(result.model_dir),
@@ -167,6 +187,8 @@ def handle_sfm(record: JobRecord, progress: Callable[[float, str], None], runner
             "used_gpu": result.used_gpu,
             "selected_sparse": result.selected_sparse,
             "warning": result.summary.warning,
+            "wall_planes": prior.get("planes", 0),
+            "wall_points_added": prior.get("added", 0),
         },
         message=result.summary.warning or f"{result.summary.registered_count} imagens registradas.",
     )
@@ -224,6 +246,30 @@ def handle_training(record: JobRecord, progress: Callable[[float, str], None], r
     log_path = paths.train_dir / "train.log"
     if log_path.is_file():
         artifacts["train_log"] = str(log_path)
+    sfm_model = Path(record.stages.get("sfm").artifacts.get("model_dir") or "") if record.stages.get("sfm") else Path()
+    prior_temporal = record.extra.get("temporal") if isinstance(record.extra.get("temporal"), dict) else {}
+    temporal_scene = build_temporal_scene(
+        points3d_txt=sfm_model / "points3D.txt" if (sfm_model / "points3D.txt").is_file() else None,
+        images_txt=sfm_model / "images.txt" if (sfm_model / "images.txt").is_file() else None,
+        frame_count=kept_frames,
+        duration_s=prior_temporal.get("durationS") if isinstance(prior_temporal.get("durationS"), (int, float)) else None,
+        fps=prior_temporal.get("fps") if isinstance(prior_temporal.get("fps"), (int, float)) else None,
+        source_kind=str(prior_temporal.get("sourceKind") or record.source.kind.value),
+        frames_dir=paths.kept_frames_dir if paths.kept_frames_dir.is_dir() else paths.frames_dir,
+    )
+    record.extra["temporal"] = temporal_scene.to_document()
+    relight_env = build_relight_env(sh_degree=3)
+    record.extra["relight"] = relight_env.to_document()
+    write_temporal_document(paths.export_dir / "temporal.json", temporal_scene)
+    write_relight_document(paths.export_dir / "relight.json", relight_env)
+    trajectories = [
+        [list(key.get("t") or [0.0, 0.0, 0.0]) for key in cluster.get("keys", [])]
+        for cluster in temporal_scene.clusters
+    ]
+    write_4dgs_npz(paths.export_dir / "4dgs.npz", list(temporal_scene.times), trajectories)
+    artifacts["temporal"] = str(paths.export_dir / "temporal.json")
+    artifacts["relight"] = str(paths.export_dir / "relight.json")
+    artifacts["4dgs"] = str(paths.export_dir / "4dgs.npz")
     return StageOutcome(
         artifacts=artifacts,
         metrics={
@@ -232,8 +278,11 @@ def handle_training(record: JobRecord, progress: Callable[[float, str], None], r
             "duration_s": result.metrics.duration_s,
             "ssim_val": result.metrics.ssim_val,
             "python_bin": python_bin,
+            "temporal_cameras": len(temporal_scene.cameras),
+            "temporal_clusters": len(temporal_scene.clusters),
+            "relight": True,
         },
-        message="Treino 3DGS concluído.",
+        message="Treino 3DGS + 4D/relight concluído.",
     )
 
 
@@ -261,6 +310,7 @@ def handle_export(record: JobRecord, progress: Callable[[float, str], None], run
         timeout_s=record.export.timeout_s,
     )
     temporal = record.extra.get("temporal") if isinstance(record.extra.get("temporal"), dict) else None
+    relight = record.extra.get("relight") if isinstance(record.extra.get("relight"), dict) else None
     result = export_scene(
         export_cfg,
         source_ply=ply,
@@ -272,6 +322,7 @@ def handle_export(record: JobRecord, progress: Callable[[float, str], None], run
         frames_dir=paths.kept_frames_dir if paths.kept_frames_dir.is_dir() else None,
         calibration_path=paths.calibration_json if paths.calibration_json.is_file() else None,
         temporal=temporal,  # type: ignore[arg-type]
+        relight=relight,  # type: ignore[arg-type]
         progress=progress,
     )
     artifacts = {
@@ -322,7 +373,7 @@ def handle_meshproxy(record: JobRecord, progress: Callable[[float, str], None]) 
             skipped=True,
         )
     except MeshProxyError as exc:
-        if exc.code == "OPEN3D_UNAVAILABLE":
+        if exc.code in {"OPEN3D_UNAVAILABLE", "MESHPROXY_TOO_LARGE"}:
             return StageOutcome(
                 artifacts={},
                 metrics={"skipped": True, "code": exc.code},
@@ -349,12 +400,17 @@ def handle_autocal(record: JobRecord, progress: Callable[[float, str], None], ho
     paths = job_paths(record.work_path)
     progress(0.1, "Estimando escala pela altura informada…")
     frames = record.stages["extracting"].artifacts.get("frames_dir") or str(paths.kept_frames_dir)
+    sfm_model = ""
+    sfm_stage = record.stages.get("sfm")
+    if sfm_stage is not None:
+        sfm_model = str(sfm_stage.artifacts.get("model_dir") or "")
     result: AutocalResult = hook.run(
         AutocalContext(
             job_id=record.job_id,
             frames_dir=frames,
             user_height_m=record.user_height_m,
             registered_names=(),
+            colmap_model_dir=sfm_model,
         )
     )
     payload = result.scene_calibration or {

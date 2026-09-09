@@ -167,6 +167,18 @@ async def retry_job(
     return JobAccepted(job_id=str(retried.job_id), state=enum_value(retried.state))
 
 
+@router.post("/{job_id}/rebuild", status_code=202, response_model=JobAccepted)
+async def rebuild_job(
+    job_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    runtime: JobRuntime = Depends(get_runtime),
+    from_stage: str = "sfm",
+) -> JobAccepted:
+    _load_owned(runtime, job_id, user)
+    rebuilt = runtime.supervisor.rebuild(job_id, from_stage)
+    return JobAccepted(job_id=str(rebuilt.job_id), state=enum_value(rebuilt.state))
+
+
 @router.get("/{job_id}/artifacts/{kind}")
 def download_artifact(
     job_id: str,
