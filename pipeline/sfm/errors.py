@@ -16,8 +16,8 @@ FEW_MATCHES_USER = (
 )
 
 FEW_REGISTERED_USER = (
-    "Poucas imagens foram registradas no SfM. "
-    "Filme com mais sobreposição entre os trechos, textura visível e luz uniforme."
+    "Poucas poses entraram na reconstrução 3D — "
+    "o recorte ficou pequeno demais para treinar um splat estável."
 )
 
 NO_RECONSTRUCTION_USER = (
@@ -36,15 +36,31 @@ def few_matches(detail: str) -> SfmError:
     return SfmError(detail, user_message=FEW_MATCHES_USER, code="FEW_MATCHES")
 
 
-def few_registered(registered: int, total: int, minimum_ratio: float) -> SfmError:
-    percent = int(round(minimum_ratio * 100))
+def few_registered(
+    registered: int,
+    total: int,
+    minimum_ratio: float,
+    *,
+    min_registered_count: int | None = None,
+) -> SfmError:
+    floor = min_registered_count if min_registered_count is not None else 20
     return SfmError(
-        f"registered {registered}/{total} below {minimum_ratio:.2f}",
+        f"registered {registered}/{total} below count {floor} or ratio {minimum_ratio:.2f}",
         user_message=(
             f"{FEW_REGISTERED_USER} "
-            f"Registradas: {registered} de {total} (mínimo {percent}%)."
+            f"Registradas: {registered} de {total} (mínimo {floor} poses)."
         ),
         code="FEW_REGISTERED",
+    )
+
+
+def subset_warning(registered: int, total: int, minimum_ratio: float) -> str:
+    percent = int(round((registered / total) * 100)) if total else 0
+    target = int(round(minimum_ratio * 100))
+    return (
+        f"Só {registered} de {total} frames entraram na reconstrução "
+        f"({percent}%; alvo {target}%). "
+        "O treino segue com o subconjunto registrado — não é preciso filmar de novo."
     )
 
 

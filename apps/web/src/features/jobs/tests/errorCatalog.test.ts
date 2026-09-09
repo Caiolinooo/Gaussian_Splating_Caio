@@ -14,6 +14,14 @@ describe('explainJobError', () => {
     expect(explained.message).toBe('Só restaram 12 frames nítidos.');
   });
 
+  it('não manda filmar de novo quando o SfM sub-registrou um clipe usável', () => {
+    const explained = explainJobError('FEW_REGISTERED');
+    expect(explained.title).toMatch(/registradas/i);
+    expect(explained.message).not.toMatch(/70%/);
+    expect(explained.action).not.toMatch(/Filme com/i);
+    expect(explained.action).toMatch(/processar de novo/i);
+  });
+
   it('não manda gravar de novo só porque o gate antigo era 150', () => {
     const explained = explainJobError('TOO_FEW_FRAMES');
     expect(explained.title).toMatch(/utilizáveis/i);

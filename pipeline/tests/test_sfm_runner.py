@@ -10,6 +10,7 @@ import pytest
 
 from sfm.config import ColmapConfig, ColmapPaths
 from sfm.errors import COLMAP_MISSING_USER, SfmError, colmap_missing
+from sfm.parse import parse_images_txt
 from sfm.runner import run_sfm
 
 IMAGES_TXT = """# Image list with two lines of data per image:
@@ -369,7 +370,8 @@ def test_rescue_exhausted_raises_few_registered(tmp_path: Path) -> None:
         )
     assert exc.value.code == "FEW_REGISTERED"
     extractors = [call for call in _graph_calls(runner2.calls) if call[1] == "feature_extractor"]
-    assert len(extractors) == 2  # original + resgate
+    assert len(extractors) == 3  # original + resgate SIFT + PINHOLE/overlap
+    assert extractors[2][extractors[2].index("--ImageReader.camera_model") + 1] == "PINHOLE"
 
 
 def test_gpu_fallback_then_rescue_keeps_cpu_mode(tmp_path: Path) -> None:
@@ -388,3 +390,82 @@ def test_gpu_fallback_then_rescue_keeps_cpu_mode(tmp_path: Path) -> None:
     ]
     assert len(rescue_extractors) == 1
     assert rescue_extractors[0][rescue_extractors[0].index("--SiftExtraction.use_gpu") + 1] == "0"
+
+
+def _images_txt(count: int) -> str:
+    lines = ["# Image list with two lines of data per image:"]
+    for index in range(1, count + 1):
+        lines.append(f"{index} 0.1 0.2 0.3 0.4 0.0 1.0 2.0 1 frame_{index:06d}.jpg")
+        lines.append("100 200 1")
+    return "\n".join(lines) + "\n"
+
+
+class _FragmentedColmap:
+    """Mapper writes a junk sparse/0 and a larger sparse/3 (job 0284bca6)."""
+
+    def __init__(self, junk: int = 5, gold: int = 20) -> None:
+        self.calls: list[list[str]] = []
+        self.junk = junk
+        self.gold = gold
+
+    def run(self, argv: Any, **_kwargs: Any) -> _FakeResult:
+        argv = list(argv)
+        self.calls.append(argv)
+        if "-h" in argv:
+            return _FakeResult(0, stdout=LEGACY_HELP)
+        step = argv[1]
+        if step == "mapper":
+            sparse = Path(argv[argv.index("--output_path") + 1])
+            for name, count in (("0", self.junk), ("3", self.gold)):
+                model = sparse / name
+                model.mkdir(parents=True, exist_ok=True)
+                (model / "images.bin").write_bytes(b"bin")
+                (model / "n_images").write_text(str(count), encoding="utf-8")
+        if step == "model_converter":
+            out = Path(argv[argv.index("--output_path") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            marker = out / "n_images"
+            count = int(marker.read_text(encoding="utf-8")) if marker.is_file() else 2
+            (out / "images.txt").write_text(_images_txt(count), encoding="utf-8")
+        return _FakeResult(0, stdout=f"{step} ok")
+
+
+def test_run_sfm_promotes_largest_sparse_model(tmp_path: Path) -> None:
+    images = tmp_path / "images"
+    images.mkdir()
+    for index in range(1, 189):
+        (images / f"frame_{index:06d}.jpg").write_bytes(b"x")
+    work = tmp_path / "colmap"
+    result = run_sfm(
+        _config(use_gpu=False, min_registered_count=20, min_registered_ratio=0.70),
+        ColmapPaths(image_dir=images, work_dir=work),
+        _FragmentedColmap(junk=5, gold=20),
+        source_kind="video",
+    )
+    assert result.summary.registered_count == 20
+    assert result.selected_sparse == "3"
+    assert result.summary.warning is not None
+    assert "20 de 188" in result.summary.warning
+    promoted = parse_images_txt((work / "sparse" / "0" / "images.txt").read_text(encoding="utf-8"))
+    assert len(promoted) == 20
+    log = (work / "colmap.log").read_text(encoding="utf-8")
+    assert "selected sparse/3" in log
+
+
+def test_run_sfm_five_cameras_still_fail_after_rescue(tmp_path: Path) -> None:
+    images = tmp_path / "images"
+    images.mkdir()
+    for index in range(1, 189):
+        (images / f"frame_{index:06d}.jpg").write_bytes(b"x")
+    runner = _FragmentedColmap(junk=5, gold=5)
+    with pytest.raises(SfmError) as exc:
+        run_sfm(
+            _config(use_gpu=False, min_registered_count=20, min_registered_ratio=0.70),
+            ColmapPaths(image_dir=images, work_dir=tmp_path / "colmap"),
+            runner,
+            source_kind="video",
+        )
+    assert exc.value.code == "FEW_REGISTERED"
+    assert "5 de 188" in exc.value.user_message
+    extractors = [call for call in _graph_calls(runner.calls) if call[1] == "feature_extractor"]
+    assert len(extractors) == 3

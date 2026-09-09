@@ -136,7 +136,12 @@ def handle_sfm(record: JobRecord, progress: Callable[[float, str], None], runner
         sequential_quadratic_overlap=record.colmap.sequential_quadratic_overlap,
         min_registered_ratio=record.colmap.min_registered_ratio,
         min_registered_count=record.colmap.min_registered_count,
+        max_exhaustive_images=record.colmap.max_exhaustive_images,
         timeout_s=record.colmap.timeout_s,
+        mapper_multiple_models=record.colmap.mapper_multiple_models,
+        mapper_max_num_models=record.colmap.mapper_max_num_models,
+        mapper_init_num_trials=record.colmap.mapper_init_num_trials,
+        mapper_ba_global_max_num_iterations=record.colmap.mapper_ba_global_max_num_iterations,
     )
     result = run_sfm(
         colmap_cfg,
@@ -159,8 +164,10 @@ def handle_sfm(record: JobRecord, progress: Callable[[float, str], None], runner
             "ratio": result.summary.ratio,
             "matcher": result.matcher,
             "used_gpu": result.used_gpu,
+            "selected_sparse": result.selected_sparse,
+            "warning": result.summary.warning,
         },
-        message=f"{result.summary.registered_count} imagens registradas.",
+        message=result.summary.warning or f"{result.summary.registered_count} imagens registradas.",
     )
 
 

@@ -119,6 +119,16 @@ def build_mapper_command(config: ColmapConfig, paths: ColmapPaths) -> list[str]:
         str(paths.image_dir),
         "--output_path",
         str(paths.sparse_dir),
+        "--Mapper.min_model_size",
+        str(config.min_registered_count),
+        "--Mapper.multiple_models",
+        _flag(config.mapper_multiple_models),
+        "--Mapper.max_num_models",
+        str(config.mapper_max_num_models),
+        "--Mapper.init_num_trials",
+        str(config.mapper_init_num_trials),
+        "--Mapper.ba_global_max_num_iterations",
+        str(config.mapper_ba_global_max_num_iterations),
     ]
 
 

@@ -12,6 +12,7 @@ from sfm.errors import (
     few_matches,
     few_registered,
     no_reconstruction,
+    subset_warning,
 )
 
 _IMAGE_LINE = re.compile(
@@ -56,6 +57,7 @@ class ReconstructionSummary:
     ratio: float
     log_registered_ids: tuple[int, ...]
     raw_log: str
+    warning: str | None = None
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -114,6 +116,48 @@ def count_input_images(image_dir: Path) -> int:
     return sum(1 for child in image_dir.iterdir() if child.is_file())
 
 
+def count_points3d_txt(text: str) -> int:
+    return sum(1 for raw in text.splitlines() if raw.strip() and not raw.lstrip().startswith("#"))
+
+
+def list_sparse_models(sparse_dir: Path) -> tuple[Path, ...]:
+    """Numeric COLMAP reconstructions (`sparse/0`, `sparse/3`, …) that have a model."""
+    if not sparse_dir.is_dir():
+        return ()
+    found: list[Path] = []
+    for child in sparse_dir.iterdir():
+        if not child.is_dir() or not child.name.isdigit():
+            continue
+        if (child / "images.bin").is_file() or (child / "images.txt").is_file():
+            found.append(child)
+    return tuple(sorted(found, key=lambda item: int(item.name)))
+
+
+def score_reconstruction(model_dir: Path) -> tuple[int, int]:
+    """`(registered_images, points3D)` — larger tuple wins."""
+    images_txt = model_dir / "images.txt"
+    registered = len(parse_images_txt_file(images_txt)) if images_txt.is_file() else 0
+    points_txt = model_dir / "points3D.txt"
+    if points_txt.is_file():
+        points = count_points3d_txt(points_txt.read_text(encoding="utf-8", errors="replace"))
+    else:
+        points = 0
+    return (registered, points)
+
+
+def pick_largest_model(sparse_dir: Path) -> Path | None:
+    """Prefer the reconstruction with most cameras, then most 3D points."""
+    scored: list[tuple[tuple[int, int], Path]] = []
+    for model in list_sparse_models(sparse_dir):
+        score = score_reconstruction(model)
+        if score[0] > 0:
+            scored.append((score, model))
+    if scored:
+        return max(scored, key=lambda item: item[0])[1]
+    models = list_sparse_models(sparse_dir)
+    return models[0] if models else None
+
+
 def summarize_reconstruction(
     *,
     images_txt: str | None,
@@ -135,9 +179,15 @@ def summarize_reconstruction(
     if registered == 0:
         raise no_reconstruction("zero registered images")
     if registered < min_registered_count:
-        raise few_registered(registered, total, min_registered_ratio)
+        raise few_registered(
+            registered,
+            total,
+            min_registered_ratio,
+            min_registered_count=min_registered_count,
+        )
+    warning = None
     if total and ratio < min_registered_ratio:
-        raise few_registered(registered, total, min_registered_ratio)
+        warning = subset_warning(registered, total, min_registered_ratio)
 
     return ReconstructionSummary(
         registered_images=mapped,
@@ -146,6 +196,7 @@ def summarize_reconstruction(
         ratio=ratio,
         log_registered_ids=log_ids,
         raw_log=log_text,
+        warning=warning,
     )
 
 

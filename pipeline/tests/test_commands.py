@@ -78,6 +78,11 @@ def test_colmap_pipeline_video_uses_sequential_matcher() -> None:
     mapper = build_mapper_command(cfg, paths)
     assert mapper[1] == "mapper"
     assert mapper[mapper.index("--output_path") + 1] == str(paths.sparse_dir)
+    assert mapper[mapper.index("--Mapper.multiple_models") + 1] == "1"
+    assert mapper[mapper.index("--Mapper.max_num_models") + 1] == "8"
+    assert mapper[mapper.index("--Mapper.init_num_trials") + 1] == "25"
+    assert mapper[mapper.index("--Mapper.ba_global_max_num_iterations") + 1] == "25"
+    assert mapper[mapper.index("--Mapper.min_model_size") + 1] == str(cfg.min_registered_count)
 
     conv = build_model_converter_txt_command(cfg, paths.model_dir)
     assert conv[1] == "model_converter"

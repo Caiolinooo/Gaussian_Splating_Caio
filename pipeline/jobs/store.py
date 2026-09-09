@@ -123,6 +123,19 @@ def _colmap(raw: dict[str, Any] | None) -> ColmapConfig:
         min_registered_count=int(data.get("min_registered_count", defaults.min_registered_count)),
         max_exhaustive_images=int(data.get("max_exhaustive_images", defaults.max_exhaustive_images)),
         timeout_s=data.get("timeout_s", defaults.timeout_s),
+        mapper_multiple_models=bool(
+            data.get("mapper_multiple_models", defaults.mapper_multiple_models)
+        ),
+        mapper_max_num_models=int(data.get("mapper_max_num_models", defaults.mapper_max_num_models)),
+        mapper_init_num_trials=int(
+            data.get("mapper_init_num_trials", defaults.mapper_init_num_trials)
+        ),
+        mapper_ba_global_max_num_iterations=int(
+            data.get(
+                "mapper_ba_global_max_num_iterations",
+                defaults.mapper_ba_global_max_num_iterations,
+            )
+        ),
     )
 
 

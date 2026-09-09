@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from sfm.config import VIDEO_MIN_REGISTERED_RATIO, ColmapConfig
 from sfm.errors import SfmError
 from sfm.parse import (
     detect_sfm_failure,
     parse_colmap_log,
     parse_images_txt,
+    pick_largest_model,
     summarize_reconstruction,
 )
 
@@ -50,17 +54,61 @@ def test_few_matches_is_explicable() -> None:
     assert "textura" in error.user_message
 
 
-def test_summarize_raises_when_ratio_below_70_percent() -> None:
+def _images_txt(count: int) -> str:
+    lines = ["# Image list with two lines of data per image:"]
+    for index in range(1, count + 1):
+        lines.append(f"{index} 0.1 0.2 0.3 0.4 0.0 1.0 2.0 1 frame_{index:06d}.jpg")
+        lines.append("100 200 1")
+    return "\n".join(lines) + "\n"
+
+
+def test_summarize_20_of_188_warns_but_passes() -> None:
+    summary = summarize_reconstruction(
+        images_txt=_images_txt(20),
+        log_text="",
+        input_image_count=188,
+        min_registered_ratio=0.70,
+        min_registered_count=20,
+    )
+    assert summary.registered_count == 20
+    assert summary.ratio == pytest.approx(20 / 188)
+    assert summary.warning is not None
+    assert "20 de 188" in summary.warning
+    assert "não é preciso filmar de novo" in summary.warning
+
+
+def test_summarize_5_of_188_still_fails() -> None:
     with pytest.raises(SfmError) as exc:
         summarize_reconstruction(
-            images_txt=IMAGES_TXT,
+            images_txt=_images_txt(5),
             log_text="",
-            input_image_count=20,
+            input_image_count=188,
             min_registered_ratio=0.70,
-            min_registered_count=2,
+            min_registered_count=20,
         )
     assert exc.value.code == "FEW_REGISTERED"
-    assert "Registradas: 2 de 20" in exc.value.user_message
+    assert "Registradas: 5 de 188" in exc.value.user_message
+    assert "mínimo 20 poses" in exc.value.user_message
+    assert "Filme com" not in exc.value.user_message
+
+
+def test_video_ratio_is_capped_below_70_percent() -> None:
+    cfg = ColmapConfig(min_registered_ratio=0.70)
+    assert cfg.effective_min_registered_ratio("video") == pytest.approx(VIDEO_MIN_REGISTERED_RATIO)
+    assert cfg.effective_min_registered_ratio("images") == pytest.approx(0.70)
+
+
+def test_pick_largest_model_prefers_more_cameras(tmp_path: Path) -> None:
+    sparse = tmp_path / "sparse"
+    junk = sparse / "0"
+    gold = sparse / "3"
+    junk.mkdir(parents=True)
+    gold.mkdir(parents=True)
+    (junk / "images.txt").write_text(_images_txt(5), encoding="utf-8")
+    (junk / "points3D.txt").write_text("# one\n1 0 0 0 0 0 0 0\n", encoding="utf-8")
+    (gold / "images.txt").write_text(_images_txt(90), encoding="utf-8")
+    (gold / "points3D.txt").write_text("# many\n" + "1 0 0 0 0 0 0 0\n" * 20, encoding="utf-8")
+    assert pick_largest_model(sparse) == gold
 
 
 def test_summarize_ok_when_ratio_passes() -> None:

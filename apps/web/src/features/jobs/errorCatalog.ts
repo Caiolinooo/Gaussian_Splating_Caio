@@ -38,8 +38,9 @@ const CATALOG: Record<KnownErrorCode, Omit<ExplainedError, 'code'>> = {
   FEW_REGISTERED: {
     title: 'Poucas imagens registradas',
     message:
-      'Menos de 70% dos frames entraram na reconstrução. A cena fica incompleta ou distorcida.',
-    action: 'Filme com mais sobreposição entre os trechos e evite giros bruscos ou zoom.',
+      'Poucas poses entraram na reconstrução 3D. O recorte ficou pequeno demais para um splat estável.',
+    action:
+      'Tente processar de novo o mesmo clipe. Só grave outra vez se repetir abaixo de cerca de 20 poses.',
   },
   NO_RECONSTRUCTION: {
     title: 'A cena 3D não pôde ser montada',

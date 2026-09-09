@@ -10,10 +10,21 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Protocol
 
-from sfm.commands import ColmapCliDialect, build_sfm_pipeline_commands
-from sfm.config import ColmapConfig, ColmapPaths, SourceKind
+from sfm.commands import (
+    ColmapCliDialect,
+    build_model_converter_txt_command,
+    build_sfm_pipeline_commands,
+)
+from sfm.config import CameraModel, ColmapConfig, ColmapPaths, SourceKind
 from sfm.errors import SfmError, colmap_failed, colmap_missing, no_reconstruction
-from sfm.parse import ReconstructionSummary, count_input_images, summarize_reconstruction
+from sfm.parse import (
+    ReconstructionSummary,
+    count_input_images,
+    list_sparse_models,
+    pick_largest_model,
+    score_reconstruction,
+    summarize_reconstruction,
+)
 
 LOGGER = logging.getLogger("pipeline.sfm")
 
@@ -62,6 +73,7 @@ class SfmResult:
     log_text: str
     log_path: Path
     used_gpu: bool
+    selected_sparse: str = "0"
 
 
 _STEP_LABELS = (
@@ -165,9 +177,13 @@ def _run_graph(
         stamp = datetime.now(UTC).isoformat()
         _append_log(paths, f"\n===== {stamp} $ {' '.join(argv)} =====\n{text}\n")
         if result.returncode != 0:
-            # Converter is best-effort if the text model already exists.
-            if argv[1] == "model_converter" and (paths.model_dir / "images.txt").is_file():
-                LOGGER.info("event=colmap_converter_skipped reason=images_txt_exists")
+            # Converter is best-effort: mapper may have written sparse/3 and not sparse/0.
+            if argv[1] == "model_converter" and (
+                (paths.model_dir / "images.txt").is_file()
+                or (paths.model_dir / "images.bin").is_file()
+                or list_sparse_models(paths.sparse_dir)
+            ):
+                LOGGER.info("event=colmap_converter_deferred reason=other_sparse_models")
                 continue
             raise _StepFailed(argv[1], result.stderr.strip() or result.stdout.strip() or "nonzero")
     return matcher, commands, "\n".join(chunks)
@@ -180,6 +196,7 @@ _RESCUE_PEAK_THRESHOLD = 0.004
 _RESCUE_EDGE_THRESHOLD = 15.0
 _RESCUE_MAX_NUM_FEATURES = 16384
 _RESCUE_SEQUENTIAL_OVERLAP = 20
+_COHERENCE_SEQUENTIAL_OVERLAP = 30
 
 
 def _rescue_plan(config: ColmapConfig) -> ColmapConfig:
@@ -191,6 +208,78 @@ def _rescue_plan(config: ColmapConfig) -> ColmapConfig:
         sift_max_num_features=_RESCUE_MAX_NUM_FEATURES,
         sequential_overlap=max(config.sequential_overlap, _RESCUE_SEQUENTIAL_OVERLAP),
     )
+
+
+def _coherence_plan(config: ColmapConfig) -> ColmapConfig:
+    """Uma tentativa extra: outro modelo de câmera + overlap maior, sem segundo stack."""
+    next_model: CameraModel = "PINHOLE" if config.camera_model != "PINHOLE" else "SIMPLE_RADIAL"
+    rescued = _rescue_plan(config)
+    return replace(
+        rescued,
+        camera_model=next_model,
+        sequential_overlap=max(rescued.sequential_overlap, _COHERENCE_SEQUENTIAL_OVERLAP),
+    )
+
+
+def promote_sparse_model(sparse_dir: Path, best: Path) -> Path:
+    """Coloca o melhor modelo em ``sparse/0`` — o trainer lê só essa pasta."""
+    target = sparse_dir / "0"
+    best_resolved = best.resolve()
+    if target.exists() and best_resolved == target.resolve():
+        return target
+    tmp = sparse_dir / f".best-{best.name}"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    best.rename(tmp)
+    if target.exists():
+        displaced = sparse_dir / best.name
+        if displaced.exists():
+            shutil.rmtree(displaced)
+        target.rename(displaced)
+    tmp.rename(target)
+    return target
+
+
+def _finalize_models(
+    config: ColmapConfig,
+    paths: ColmapPaths,
+    runner: CommandRunner,
+) -> tuple[str, str]:
+    """Converte todo ``sparse/N`` e promove o maior para ``sparse/0``."""
+    chunks: list[str] = []
+    for model in list_sparse_models(paths.sparse_dir):
+        if (model / "images.txt").is_file():
+            continue
+        argv = build_model_converter_txt_command(config, model)
+        try:
+            result = runner.run(argv, timeout_s=config.timeout_s)
+        except FileNotFoundError as exc:
+            raise colmap_missing(str(argv[0])) from exc
+        except OSError as exc:
+            if getattr(exc, "errno", None) in {2, 3} or getattr(exc, "winerror", None) == 2:
+                raise colmap_missing(str(argv[0])) from exc
+            raise
+        text = f"{result.stdout}\n{result.stderr}"
+        chunks.append(text)
+        stamp = datetime.now(UTC).isoformat()
+        _append_log(paths, f"\n===== {stamp} $ {' '.join(argv)} =====\n{text}\n")
+        if result.returncode != 0:
+            LOGGER.warning("event=colmap_convert_skip model=%s detail=%s", model.name, text[:200])
+    best = pick_largest_model(paths.sparse_dir)
+    if best is None:
+        return "\n".join(chunks), "0"
+    origin = best.name
+    cameras, points = score_reconstruction(best)
+    if origin != "0":
+        note = (
+            f"selected sparse/{origin} ({cameras} images, {points} points) as sparse/0; "
+            "previous sparse/0 was not the largest reconstruction"
+        )
+        LOGGER.info("event=colmap_select_sparse origin=%s cameras=%s points=%s", origin, cameras, points)
+        _append_log(paths, f"\n===== {note} =====\n")
+        chunks.append(note)
+        promote_sparse_model(paths.sparse_dir, best)
+    return "\n".join(chunks), origin
 
 
 def run_sfm(
@@ -209,6 +298,7 @@ def run_sfm(
     plans = [config]
     cpu_tried = not config.use_gpu
     rescue_tried = False
+    coherence_tried = False
     index = 0
     while index < len(plans):
         plan = plans[index]
@@ -243,6 +333,10 @@ def run_sfm(
                 continue
             raise colmap_failed(exc.step, exc.detail) from exc
 
+        extra_log, selected_sparse = _finalize_models(plan, paths, runner)
+        if extra_log:
+            log_text = f"{log_text}\n{extra_log}"
+
         images_txt_path = paths.model_dir / "images.txt"
         images_txt = (
             images_txt_path.read_text(encoding="utf-8", errors="replace")
@@ -251,12 +345,12 @@ def run_sfm(
         )
         try:
             if images_txt is None and not (paths.model_dir / "images.bin").is_file():
-                raise no_reconstruction("mapper produced no sparse/0 model")
+                raise no_reconstruction("mapper produced no sparse model")
             summary = summarize_reconstruction(
                 images_txt=images_txt,
                 log_text=log_text,
                 input_image_count=count_input_images(paths.image_dir),
-                min_registered_ratio=plan.min_registered_ratio,
+                min_registered_ratio=plan.effective_min_registered_ratio(source_kind),
                 min_registered_count=plan.min_registered_count,
             )
         except SfmError as exc:
@@ -279,18 +373,44 @@ def run_sfm(
                     )
                 index += 1
                 continue
+            if exc.code in _RESCUABLE_CODES and not coherence_tried:
+                coherence_tried = True
+                plans.append(_coherence_plan(plan))
+                LOGGER.warning(
+                    "event=colmap_coherence code=%s camera_model=%s",
+                    exc.code,
+                    plans[-1].camera_model,
+                )
+                _append_log(
+                    paths,
+                    f"\n===== quality gate failed ({exc.code}); coherence attempt with "
+                    f"{plans[-1].camera_model} and overlap "
+                    f"{plans[-1].sequential_overlap} =====\n",
+                )
+                if progress is not None:
+                    progress(
+                        0.0,
+                        "Ainda poucas poses — tentando outro modelo de câmera e mais sobreposição…",
+                    )
+                index += 1
+                continue
             raise
 
+        done_message = summary.warning or f"{summary.registered_count} imagens registradas."
         if progress is not None:
-            progress(1.0, f"{summary.registered_count} imagens registradas.")
+            progress(1.0, done_message)
         LOGGER.info(
-            "event=sfm_done matcher=%s registered=%s total=%s ratio=%.3f used_gpu=%s rescue=%s",
+            "event=sfm_done matcher=%s registered=%s total=%s ratio=%.3f used_gpu=%s "
+            "rescue=%s coherence=%s selected_sparse=%s warning=%s",
             matcher,
             summary.registered_count,
             summary.input_image_count,
             summary.ratio,
             plan.use_gpu,
             rescue_tried,
+            coherence_tried,
+            selected_sparse,
+            bool(summary.warning),
         )
         return SfmResult(
             matcher=matcher,
@@ -301,6 +421,7 @@ def run_sfm(
             log_text=log_text,
             log_path=paths.work_dir / LOG_FILENAME,
             used_gpu=plan.use_gpu,
+            selected_sparse=selected_sparse,
         )
 
     # Unreachable: o laço sempre retorna ou levanta — mantém type-checkers felizes.
