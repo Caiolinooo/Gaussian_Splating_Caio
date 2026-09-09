@@ -130,7 +130,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Gaussian Splatting — API local"
-    version: str = "0.2.0"
+    version: str = "0.3.0"
     cors_origins: CorsOrigins = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
     serve_web_dir: Path | None = None
     data_root: Path = Path("data")
