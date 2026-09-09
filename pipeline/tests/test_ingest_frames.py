@@ -2,23 +2,29 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from ingest.adaptive import compute_adaptive_rate, format_fps
-from ingest.config import ImageInfo, ImageIngestConfig
+from ingest.config import ImageInfo, ImageIngestConfig, ToolBins, VideoIngestConfig
 from ingest.errors import IngestError
 from ingest.images import ingest_images, next_version_dir, validate_image_info
 from ingest.quality import (
     FrameScore,
+    compute_keep_floor,
     compute_normalized_size,
+    compute_quality_target,
     is_near_duplicate,
     laplacian_variance,
     perceptual_signature,
+    require_kept_frames,
     select_frames,
     signature_distance,
 )
+from ingest.video import ingest_video
 
 
 def _flat(width: int = 16, height: int = 16, value: float = 128.0) -> list[list[float]]:
@@ -118,6 +124,99 @@ def test_select_frames_relaxes_blur_when_too_few() -> None:
     )
     assert selection.blur_threshold_used == 40.0
     assert len(selection.kept) == 2
+
+
+def test_keep_floor_is_unusable_not_extract_target() -> None:
+    assert compute_keep_floor(301, source_kind="video") == 8
+    assert compute_keep_floor(40, source_kind="video") == 8
+    assert compute_keep_floor(12, source_kind="gif") == 1
+    assert compute_quality_target(301) == 120
+    assert compute_quality_target(20) == 20
+
+
+def test_nineteen_kept_of_min_150_now_proceeds() -> None:
+    """Production job 0284bca6: 19 kept after filter used to die at min 150."""
+    floor = require_kept_frames(19, 301, source_kind="video")
+    assert floor == 8
+    with pytest.raises(IngestError) as exc:
+        require_kept_frames(5, 301, source_kind="video")
+    assert exc.value.code == "TOO_FEW_FRAMES"
+    assert "mínimo 8" in exc.value.user_message
+    assert "Grave com mais tempo" not in exc.value.user_message
+    require_kept_frames(3, 12, source_kind="gif")
+
+
+def test_select_frames_relaxes_dedup_when_too_few() -> None:
+    """8×8 signatures with MAD ~1–2 used to all count as dups at threshold 4."""
+    scores = [
+        FrameScore(index, f"f{index}", 80.0, (index % 3,) * 8)
+        for index in range(12)
+    ]
+    tight = select_frames(
+        scores,
+        blur_threshold=40.0,
+        relaxed_blur_threshold=20.0,
+        dedup_threshold=4.0,
+        relaxed_dedup_threshold=4.0,
+        target_min=8,
+        target_max=400,
+    )
+    assert len(tight.kept) == 1
+    relaxed = select_frames(
+        scores,
+        blur_threshold=40.0,
+        relaxed_blur_threshold=20.0,
+        dedup_threshold=4.0,
+        relaxed_dedup_threshold=0.5,
+        target_min=8,
+        target_max=400,
+    )
+    assert len(relaxed.kept) >= 8
+    assert relaxed.dedup_threshold_used == 0.5
+
+
+def test_ingest_video_nineteen_kept_writes_frames(tmp_path: Path) -> None:
+    src = tmp_path / "clip.mp4"
+    src.write_bytes(b"fake-mp4")
+
+    class Runner:
+        def run(self, argv, *, cwd=None, env=None, timeout_s=None):
+            del cwd, env, timeout_s
+            if "ffprobe" in str(argv[0]):
+                payload = {
+                    "streams": [
+                        {
+                            "width": 720,
+                            "height": 1280,
+                            "duration": "10.9",
+                            "r_frame_rate": "30/1",
+                            "nb_frames": "296",
+                        }
+                    ],
+                    "format": {"duration": "10.9"},
+                }
+                return SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr="")
+            raw_dir = Path(argv[-1]).parent
+            for index in range(1, 41):
+                (raw_dir / f"frame_{index:06d}.jpg").write_bytes(b"x")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    def score_fn(path: Path, index: int) -> FrameScore:
+        if index < 19:
+            return FrameScore(index, str(path), 200.0, (index * 20,) * 8)
+        return FrameScore(index, str(path), 5.0, (0,) * 8)
+
+    result = ingest_video(
+        src,
+        tmp_path / "out",
+        VideoIngestConfig(),
+        ToolBins(),
+        Runner(),
+        score_fn=score_fn,
+        source_kind="video",
+    )
+    assert len(result.kept_paths) == 19
+    assert (tmp_path / "out" / "manifest.json").is_file()
 
 
 def test_normalized_size_even_and_capped() -> None:

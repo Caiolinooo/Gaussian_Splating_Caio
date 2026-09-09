@@ -53,9 +53,11 @@ const CATALOG: Record<KnownErrorCode, Omit<ExplainedError, 'code'>> = {
       'Baixe o registro COLMAP do job para ver a causa exata. Abra Setup e confirme que o COLMAP está instalado e executando; se o erro persistir, recapture o material com mais textura/luz.',
   },
   TOO_FEW_FRAMES: {
-    title: 'Poucos frames nítidos',
-    message: 'Depois de filtrar blur e duplicatas, restaram poucos frames para o SfM.',
-    action: 'Grave com mais tempo, menos movimento brusco e melhor iluminação.',
+    title: 'Poucos frames utilizáveis',
+    message:
+      'Depois de filtrar blur e duplicatas, restaram poucos frames distintos para o SfM.',
+    action:
+      'Envie um clipe com mais variação de ponto de vista. Vídeos curtos e nítidos já são aceitos; só falha quando restam menos de cerca de 8 frames distintos.',
   },
   VIDEO_UNREADABLE: {
     title: 'Vídeo ilegível',

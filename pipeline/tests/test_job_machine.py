@@ -263,6 +263,30 @@ def test_cancel_queued_and_mid_run(tmp_path: Path) -> None:
     assert flag["cancel"] is True
 
 
+def test_old_video_ingest_payload_gets_relaxed_dedup() -> None:
+    """Retry of pre-fix jobs kept dedup=4.0; missing relax field must default to 0.5."""
+    record = record_from_dict(
+        {
+            "job_id": "old",
+            "user_id": "u",
+            "state": "error",
+            "source": {"kind": "video", "paths": ["/x.mp4"]},
+            "work_dir": "/tmp/old",
+            "user_height_m": 1.7,
+            "created_at": "2026-09-09T00:00:00+00:00",
+            "updated_at": "2026-09-09T00:00:00+00:00",
+            "video_ingest": {
+                "target_min_frames": 150,
+                "target_max_frames": 400,
+                "dedup_threshold": 4.0,
+            },
+        }
+    )
+    assert record.video_ingest.dedup_threshold == 4.0
+    assert record.video_ingest.relaxed_dedup_threshold == 0.5
+    assert record.video_ingest.min_keep_frames == 8
+
+
 def test_json_roundtrip_preserves_schema(tmp_path: Path) -> None:
     store = JsonJobStore(tmp_path / "store")
     machine = JobMachine(store, handlers=_handlers())

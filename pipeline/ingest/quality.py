@@ -9,7 +9,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from ingest.errors import too_few_frames
+
 Gray = Sequence[Sequence[float]]
+
+# Hard fail only when the set is unusable for SfM. 150 is an extract *goal*.
+DEFAULT_ABSOLUTE_MIN_KEEP = 8
+DEFAULT_QUALITY_FLOOR = 20
+DEFAULT_KEEP_RATIO = 0.4
 
 
 @dataclass(frozen=True)
@@ -28,6 +35,7 @@ class FrameSelection:
     dropped_overflow: tuple[FrameScore, ...]
     blur_threshold_used: float
     warning: str | None = None
+    dedup_threshold_used: float = 0.0
 
 
 def laplacian_variance(pixels: Gray) -> float:
@@ -124,6 +132,62 @@ def compute_normalized_size(
     return max(new_w, 2), max(new_h, 2)
 
 
+def compute_quality_target(
+    extracted_count: int,
+    *,
+    target_min: int = 150,
+    quality_floor: int = DEFAULT_QUALITY_FLOOR,
+    keep_ratio: float = DEFAULT_KEEP_RATIO,
+) -> int:
+    """Aspirational keep count — warning only, never a hard fail."""
+    if extracted_count < 1:
+        return quality_floor
+    return min(target_min, max(quality_floor, int(extracted_count * keep_ratio)))
+
+
+def compute_keep_floor(
+    extracted_count: int,
+    *,
+    source_kind: str = "video",
+    absolute_min: int = DEFAULT_ABSOLUTE_MIN_KEEP,
+) -> int:
+    """Hard-fail threshold after blur/dedup.
+
+    Video and GIF share this policy. GIF uses 1 (short loops). Video fails
+    only below ``absolute_min`` (default 8) — never the extract target of 150.
+    ``extracted_count`` is accepted so callers can pass probe size; it does
+    not raise the floor (a 19-kept / 301-extracted clip must proceed).
+    """
+    del extracted_count
+    kind = source_kind.lower()
+    if kind == "gif":
+        return 1
+    return max(1, absolute_min)
+
+
+def require_kept_frames(
+    kept_count: int,
+    extracted_count: int,
+    *,
+    source_kind: str = "video",
+    min_keep: int | None = None,
+    absolute_min: int = DEFAULT_ABSOLUTE_MIN_KEEP,
+) -> int:
+    """Raise ``TOO_FEW_FRAMES`` only when kept < the unusable floor."""
+    floor = (
+        min_keep
+        if min_keep is not None
+        else compute_keep_floor(
+            extracted_count,
+            source_kind=source_kind,
+            absolute_min=absolute_min,
+        )
+    )
+    if kept_count < floor:
+        raise too_few_frames(kept_count, floor)
+    return floor
+
+
 def _evenly_pick(items: Sequence[FrameScore], count: int) -> list[FrameScore]:
     if count >= len(items):
         return list(items)
@@ -141,6 +205,31 @@ def _evenly_pick(items: Sequence[FrameScore], count: int) -> list[FrameScore]:
     return chosen
 
 
+def _deduplicate(
+    sharp: Sequence[FrameScore],
+    threshold: float,
+) -> tuple[list[FrameScore], list[FrameScore]]:
+    kept: list[FrameScore] = []
+    dropped_dup: list[FrameScore] = []
+    last_kept: FrameScore | None = None
+    for item in sharp:
+        if last_kept is not None and is_near_duplicate(
+            last_kept.signature,
+            item.signature,
+            threshold=threshold,
+        ):
+            if item.sharpness > last_kept.sharpness:
+                dropped_dup.append(last_kept)
+                kept[-1] = item
+                last_kept = item
+            else:
+                dropped_dup.append(item)
+            continue
+        kept.append(item)
+        last_kept = item
+    return kept, dropped_dup
+
+
 def select_frames(
     scores: Sequence[FrameScore],
     *,
@@ -149,6 +238,7 @@ def select_frames(
     dedup_threshold: float,
     target_min: int,
     target_max: int,
+    relaxed_dedup_threshold: float | None = None,
 ) -> FrameSelection:
     """Drop blurry and near-duplicate frames, then cap at ``target_max``."""
     if not scores:
@@ -159,6 +249,7 @@ def select_frames(
             dropped_overflow=(),
             blur_threshold_used=blur_threshold,
             warning="Nenhum frame disponível após a extração.",
+            dedup_threshold_used=dedup_threshold,
         )
 
     ordered = tuple(scores)
@@ -170,24 +261,12 @@ def select_frames(
         sharp = [item for item in ordered if item.sharpness >= threshold]
         dropped_blur = [item for item in ordered if item.sharpness < threshold]
 
-    kept: list[FrameScore] = []
-    dropped_dup: list[FrameScore] = []
-    last_kept: FrameScore | None = None
-    for item in sharp:
-        if last_kept is not None and is_near_duplicate(
-            last_kept.signature,
-            item.signature,
-            threshold=dedup_threshold,
-        ):
-            if item.sharpness > last_kept.sharpness:
-                dropped_dup.append(last_kept)
-                kept[-1] = item
-                last_kept = item
-            else:
-                dropped_dup.append(item)
-            continue
-        kept.append(item)
-        last_kept = item
+    used_dedup = dedup_threshold
+    kept, dropped_dup = _deduplicate(sharp, used_dedup)
+    relax_dedup = dedup_threshold if relaxed_dedup_threshold is None else relaxed_dedup_threshold
+    if len(kept) < target_min and relax_dedup < used_dedup:
+        used_dedup = relax_dedup
+        kept, dropped_dup = _deduplicate(sharp, used_dedup)
 
     dropped_overflow: list[FrameScore] = []
     if len(kept) > target_max:
@@ -197,10 +276,13 @@ def select_frames(
         kept = picked
 
     warning: str | None = None
+    quality_target = compute_quality_target(len(ordered), target_min=target_min)
     if len(kept) < target_min:
         warning = (
-            f"Só restaram {len(kept)} frames nítidos (alvo mínimo {target_min}). "
-            "Grave com mais textura, luz uniforme e menos movimento brusco."
+            f"Só restaram {len(kept)} frames nítidos "
+            f"(alvo {target_min}, aviso a partir de {quality_target}). "
+            "A reconstrução segue se houver frames suficientes; "
+            "mais pontos de vista deixam o SfM mais estável."
         )
 
     return FrameSelection(
@@ -210,4 +292,5 @@ def select_frames(
         dropped_overflow=tuple(dropped_overflow),
         blur_threshold_used=threshold,
         warning=warning,
+        dedup_threshold_used=used_dedup,
     )

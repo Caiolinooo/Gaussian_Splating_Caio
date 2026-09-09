@@ -45,7 +45,9 @@ def test_ffmpeg_extract_command_uses_fps_and_even_scale() -> None:
     assert argv[argv.index("-i") + 1].endswith("clip.mp4")
     vf = argv[argv.index("-vf") + 1]
     assert f"fps={format_fps(8.3333)}" in vf
-    assert "scale=1600:1600:force_original_aspect_ratio=decrease" in vf
+    assert "min(1600,iw)" in vf
+    assert "min(1600,ih)" in vf
+    assert "force_original_aspect_ratio=decrease" in vf
     assert "trunc(iw/2)*2" in vf
     assert argv[argv.index("-q:v") + 1] == "2"
     assert argv[-1].endswith("frame_%06d.jpg")

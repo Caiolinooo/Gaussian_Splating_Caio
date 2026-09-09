@@ -41,7 +41,7 @@ Inspiração (só o que cabe no produto; **não** clonamos os projetos):
 - **Detectar** por sufixo/conjunto (`pipeline/sceneio/detect.py`). O upload HTTP só persiste arquivos; o kind vem do detector. Kinds: `video` \| `images` \| `gif` \| `ply`. Depth, paredes, Comfy e 4D **não** são kind.
 - **Ingerir** sempre grava `ingest.json` no work dir (kind, paths, temporal).
 - **PLY direto**: não roda COLMAP, gsplat, meshproxy nem autocal. Exporta o splat recebido.
-- **GIF**: mesmo caminho de vídeo (ffmpeg → frames). GIF curto relaxa o mínimo de frames. Metadados temporais alimentam o scrubber; **não** há treino 4DGS.
+- **GIF**: mesmo caminho de vídeo (ffmpeg → frames). Vídeo e GIF compartilham o piso de frames: falha só se for inutilizável (GIF=1, vídeo=8). O alvo 150 é aviso, não hard-fail. Metadados temporais alimentam o scrubber; **não** há treino 4DGS.
 - **Export**: `master.ply` (mestre) + `scene.ksplat` (web, se houver splat-transform) + `scene.json` (schema `@gs/viewer`, camelCase) + `scene.zip` (pacote para outros programas). Sidecars (`calibration.json`, `proxy.glb`, mapas de depth) entram no zip **quando o arquivo existir**.
 - **Viewer**: interface `SplatRenderer` única. Spark = caminho WebGPU; MkKellogg = WebGL2. Sem segundo viewer.
 - **4D / relight**: campos opcionais no JSON de cena. `relight.mode = unsupported` até existir backend. SH baked (`hasSphericalHarmonics`) é o que o splat 3DGS já carrega.

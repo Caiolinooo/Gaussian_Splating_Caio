@@ -12,14 +12,16 @@ from typing import Protocol
 
 from ingest.adaptive import AdaptiveRate, compute_adaptive_rate, format_fps
 from ingest.config import ToolBins, VideoIngestConfig, VideoProbe
-from ingest.errors import IngestError, too_few_frames, video_unreadable
+from ingest.errors import IngestError, video_unreadable
 from ingest.probe import build_ffprobe_command, parse_ffprobe_json
 from ingest.quality import (
     FrameScore,
     FrameSelection,
     compute_normalized_size,
+    compute_quality_target,
     laplacian_variance,
     perceptual_signature,
+    require_kept_frames,
     select_frames,
 )
 
@@ -81,7 +83,7 @@ def build_ffmpeg_extract_command(
         edge -= 1
     vf = (
         f"fps={format_fps(fps)},"
-        f"scale={edge}:{edge}:force_original_aspect_ratio=decrease,"
+        f"scale='min({edge},iw)':'min({edge},ih)':force_original_aspect_ratio=decrease,"
         "scale=trunc(iw/2)*2:trunc(ih/2)*2"
     )
     return [
@@ -141,6 +143,7 @@ def ingest_video(
     progress: ProgressFn | None = None,
     score_fn: ScoreFn | None = None,
     min_keep: int | None = None,
+    source_kind: str = "video",
 ) -> VideoIngestResult:
     """Run the video intake pipeline. ``runner`` must execute ffmpeg/ffprobe."""
     source = source.resolve()
@@ -212,13 +215,19 @@ def ingest_video(
         blur_threshold=config.blur_threshold,
         relaxed_blur_threshold=config.relaxed_blur_threshold,
         dedup_threshold=config.dedup_threshold,
+        relaxed_dedup_threshold=config.relaxed_dedup_threshold,
         target_min=config.target_min_frames,
         target_max=config.target_max_frames,
     )
 
-    floor = config.target_min_frames if min_keep is None else min_keep
-    if len(selection.kept) < floor:
-        raise too_few_frames(len(selection.kept), floor)
+    extracted_count = len(raw_frames)
+    floor = require_kept_frames(
+        len(selection.kept),
+        extracted_count,
+        source_kind=source_kind,
+        min_keep=min_keep,
+        absolute_min=config.min_keep_frames,
+    )
 
     kept_paths: list[Path] = []
     for order, item in enumerate(selection.kept, start=1):
@@ -243,15 +252,26 @@ def ingest_video(
         },
         "normalize_size": list(normalize),
         "kept": [str(path) for path in kept_paths],
+        "extracted": extracted_count,
         "dropped_blur": len(selection.dropped_blur),
         "dropped_dup": len(selection.dropped_dup),
         "dropped_overflow": len(selection.dropped_overflow),
+        "keep_floor": floor,
+        "quality_target": compute_quality_target(
+            extracted_count, target_min=config.target_min_frames
+        ),
+        "blur_threshold_used": selection.blur_threshold_used,
+        "dedup_threshold_used": selection.dedup_threshold_used,
+        "warning": selection.warning,
     }
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
-    _emit(progress, 1.0, f"{len(kept_paths)} frames prontos.")
+    done_message = f"{len(kept_paths)} frames prontos."
+    if selection.warning:
+        done_message = f"{done_message} {selection.warning}"
+    _emit(progress, 1.0, done_message)
     LOGGER.info(
         "event=ingest_video_done kept=%s blur=%s dup=%s overflow=%s",
         len(kept_paths),

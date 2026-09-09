@@ -80,6 +80,10 @@ def _video_ingest(raw: dict[str, Any] | None) -> VideoIngestConfig:
             data.get("relaxed_blur_threshold", defaults.relaxed_blur_threshold)
         ),
         dedup_threshold=float(data.get("dedup_threshold", defaults.dedup_threshold)),
+        relaxed_dedup_threshold=float(
+            data.get("relaxed_dedup_threshold", defaults.relaxed_dedup_threshold)
+        ),
+        min_keep_frames=int(data.get("min_keep_frames", defaults.min_keep_frames)),
         max_edge_px=int(data.get("max_edge_px", defaults.max_edge_px)),
         jpeg_quality=int(data.get("jpeg_quality", defaults.jpeg_quality)),
         min_width=int(data.get("min_width", defaults.min_width)),

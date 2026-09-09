@@ -21,6 +21,7 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- **Ingestão de vídeo não falha mais no mínimo rígido de 150 frames**: o alvo 150–400 continua só para extração/aviso. O gate de falha é o piso inutilizável (8 frames no vídeo, 1 no GIF). O dedup 8×8 com limiar 4.0 tratava um passeio lento como tudo-duplicata (job `0284bca6`: 301 extraídos → 183 nítidos → 19 kept). Limiar padrão 1.0, relaxo 0.5 se faltar quadro. Mensagem `TOO_FEW_FRAMES` deixa de mandar “grave de novo” quando o material só era curto demais para o gate antigo. ffmpeg não faz mais upscale de 720p para 1600.
 - **SfM resiliente no servidor headless**: se `feature_extractor`/matcher falharem com GPU (sem contexto OpenGL/X ou COLMAP sem CUDA), o pipeline limpa o estado parcial e repete o grafo COLMAP uma vez com `use_gpu=0` em vez de derrubar o job. Novo env `COLMAP_USE_GPU=0` força CPU desde o início.
 - **Retry de job não herda mais estado parcial**: `database.db` (+ `-wal`/`-shm`) e `sparse/` de tentativas anteriores são removidos antes de cada tentativa do SfM — o `mapper` não escreve mais em `sparse/1` enquanto o `model_converter` lê um `sparse/0` velho.
 - **Setup detecta COLMAP quebrado**: `detect_colmap` marca ERRO quando `colmap -h` sai com código não-zero (ex.: `libGL`/CUDA runtime ausentes), em vez de reportar OK.

@@ -49,8 +49,10 @@ def too_few_frames(count: int, minimum: int) -> IngestError:
     return IngestError(
         f"too few usable frames: {count} < {minimum}",
         user_message=(
-            f"Só restaram {count} frames nítidos (mínimo {minimum}). "
-            "Grave com mais tempo, menos movimento brusco e melhor iluminação."
+            f"Só restaram {count} frames utilizáveis (mínimo {minimum} para tentar o SfM). "
+            "O clipe é curto demais ou os quadros são quase idênticos. "
+            "Envie um vídeo com mais variação de ponto de vista — "
+            "clipes nítidos de alguns segundos já bastam."
         ),
         code="TOO_FEW_FRAMES",
     )

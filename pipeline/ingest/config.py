@@ -22,7 +22,11 @@ class VideoIngestConfig:
     oversample: float = 1.25
     blur_threshold: float = 80.0
     relaxed_blur_threshold: float = 40.0
-    dedup_threshold: float = 4.0
+    # 8×8 mean signatures move slowly on a room walk; 4.0 treated every
+    # consecutive frame as a dup (prod job: 183 sharp → 19 kept).
+    dedup_threshold: float = 1.0
+    relaxed_dedup_threshold: float = 0.5
+    min_keep_frames: int = 8
     max_edge_px: int = 1600
     jpeg_quality: int = 2
     min_width: int = 640
@@ -36,6 +40,8 @@ class VideoIngestConfig:
             raise ValueError("target_max_frames must be >= target_min_frames")
         if self.oversample < 1.0:
             raise ValueError("oversample must be >= 1.0")
+        if self.min_keep_frames < 1:
+            raise ValueError("min_keep_frames must be >= 1")
         if self.max_edge_px < 64:
             raise ValueError("max_edge_px must be >= 64")
 

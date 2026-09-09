@@ -14,6 +14,13 @@ describe('explainJobError', () => {
     expect(explained.message).toBe('Só restaram 12 frames nítidos.');
   });
 
+  it('não manda gravar de novo só porque o gate antigo era 150', () => {
+    const explained = explainJobError('TOO_FEW_FRAMES');
+    expect(explained.title).toMatch(/utilizáveis/i);
+    expect(explained.action).not.toMatch(/Grave com mais tempo/i);
+    expect(explained.action).toMatch(/8 frames/i);
+  });
+
   it('cai no genérico para código desconhecido', () => {
     const explained = explainJobError('WEIRD', null);
     expect(explained.action).toMatch(/registro/i);

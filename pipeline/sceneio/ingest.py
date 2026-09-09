@@ -133,7 +133,6 @@ def ingest_scene(
         )
 
     if detected is SourceKind.VIDEO or detected is SourceKind.GIF:
-        min_keep = 1 if detected is SourceKind.GIF else None
         result = ingest_video(
             resolved[0],
             paths.frames_dir,
@@ -141,7 +140,7 @@ def ingest_scene(
             tools,
             runner,
             progress=progress,
-            min_keep=min_keep,
+            source_kind=detected.value,
         )
         temporal = _temporal_from_video(
             kind=detected,
@@ -177,12 +176,22 @@ def ingest_scene(
             },
             metrics={
                 "kept_frames": len(result.kept_paths),
+                "extracted_frames": len(result.selection.kept)
+                + len(result.selection.dropped_blur)
+                + len(result.selection.dropped_dup)
+                + len(result.selection.dropped_overflow),
                 "strategy": result.rate.strategy,
                 "extract_fps": result.rate.extract_fps,
                 "dropped_blur": len(result.selection.dropped_blur),
                 "dropped_dup": len(result.selection.dropped_dup),
+                "blur_threshold_used": result.selection.blur_threshold_used,
+                "dedup_threshold_used": result.selection.dedup_threshold_used,
+                "warning": result.selection.warning,
             },
-            message=f"{len(result.kept_paths)} frames extraídos do {label}.",
+            message=(
+                f"{len(result.kept_paths)} frames extraídos do {label}."
+                + (f" {result.selection.warning}" if result.selection.warning else "")
+            ),
             skip_reconstruction=False,
         )
 
