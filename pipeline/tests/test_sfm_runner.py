@@ -314,7 +314,11 @@ class _GateFailUntilRescue:
         if self.fail_gpu and _is_gpu_invocation(argv):
             return _FakeResult(1, stderr="OpenGL context unavailable")
         step = argv[1]
-        if step == "feature_extractor" and "--SiftExtraction.peak_threshold" in argv:
+        if (
+            step == "feature_extractor"
+            and "--SiftExtraction.max_num_features" in argv
+            and argv[argv.index("--SiftExtraction.max_num_features") + 1] == "16384"
+        ):
             self.rescued = True
         if step == "mapper":
             out = Path(argv[argv.index("--output_path") + 1]) / "0"
@@ -386,7 +390,11 @@ def test_gpu_fallback_then_rescue_keeps_cpu_mode(tmp_path: Path) -> None:
     assert result.summary.registered_count == 2
     graph = _graph_calls(runner.calls)
     rescue_extractors = [
-        call for call in graph if call[1] == "feature_extractor" and "--SiftExtraction.peak_threshold" in call
+        call
+        for call in graph
+        if call[1] == "feature_extractor"
+        and "--SiftExtraction.max_num_features" in call
+        and call[call.index("--SiftExtraction.max_num_features") + 1] == "16384"
     ]
     assert len(rescue_extractors) == 1
     assert rescue_extractors[0][rescue_extractors[0].index("--SiftExtraction.use_gpu") + 1] == "0"
@@ -450,6 +458,54 @@ def test_run_sfm_promotes_largest_sparse_model(tmp_path: Path) -> None:
     assert len(promoted) == 20
     log = (work / "colmap.log").read_text(encoding="utf-8")
     assert "selected sparse/3" in log
+
+
+class _WeakRatioThenSequential:
+    """Exhaustive registers few frames with many points; sequential improves ratio."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+        self.saw_sequential = False
+
+    def run(self, argv: Any, **_kwargs: Any) -> _FakeResult:
+        argv = list(argv)
+        self.calls.append(argv)
+        if "-h" in argv:
+            return _FakeResult(0, stdout=LEGACY_HELP)
+        step = argv[1]
+        if step == "sequential_matcher":
+            self.saw_sequential = True
+        count = 22 if self.saw_sequential else 10
+        if step == "mapper":
+            out = Path(argv[argv.index("--output_path") + 1]) / "0"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "images.bin").write_bytes(b"bin")
+        if step == "model_converter":
+            out = Path(argv[argv.index("--output_path") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "images.txt").write_text(_images_txt(count), encoding="utf-8")
+            (out / "points3D.txt").write_text("\n".join(f"{i} 0 0 0" for i in range(300)), encoding="utf-8")
+        return _FakeResult(0, stdout=f"{step} ok")
+
+
+def test_run_sfm_retries_sequential_on_weak_video_ratio(tmp_path: Path) -> None:
+    images = tmp_path / "images"
+    images.mkdir()
+    for index in range(1, 41):
+        (images / f"frame_{index:06d}.jpg").write_bytes(b"x")
+    runner = _WeakRatioThenSequential()
+    result = run_sfm(
+        _config(use_gpu=False, matcher="exhaustive", min_registered_count=2, min_registered_ratio=0.70),
+        ColmapPaths(image_dir=images, work_dir=tmp_path / "colmap"),
+        runner,
+        source_kind="video",
+    )
+    assert runner.saw_sequential is True
+    assert result.matcher == "sequential"
+    assert result.summary.registered_count == 22
+    matchers = [call[1] for call in _graph_calls(runner.calls) if "matcher" in call[1]]
+    assert "exhaustive_matcher" in matchers
+    assert "sequential_matcher" in matchers
 
 
 def test_run_sfm_five_cameras_still_fail_after_rescue(tmp_path: Path) -> None:

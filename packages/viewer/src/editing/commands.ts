@@ -35,7 +35,78 @@ export type EditorOp =
     }
   | { type: 'setCalibration'; previous: CalibrationJson; next: CalibrationJson }
   | { type: 'setOverlays'; previous: OverlayJson[]; next: OverlayJson[] }
-  | { type: 'setSceneName'; name: string; previousName: string };
+  | { type: 'setSceneName'; name: string; previousName: string }
+  /* --- Edição de splats (C1) --- */
+  | {
+      type: 'splatDelete';
+      /** Índices removidos (para restauração exata). */
+      indices: number[];
+      /** Dados completos antes da remoção. */
+      previous: SplatBuffersJson | null;
+      count: number;
+    }
+  | {
+      type: 'splatAppearance';
+      indices: number[];
+      previous: SplatBuffersJson | null;
+      next: SplatBuffersJson | null;
+      params: AppearanceParams;
+    }
+  | {
+      type: 'splatCrop';
+      shape: RegionShapeJson;
+      invert: boolean;
+      previous: SplatBuffersJson | null;
+    }
+  | {
+      type: 'splatDecimate';
+      target: number;
+      previous: SplatBuffersJson | null;
+      next: SplatBuffersJson | null;
+    }
+  | {
+      type: 'splatRecenter';
+      offset: [number, number, number];
+      previous: SplatBuffersJson | null;
+    }
+  /**
+   * Restaura buffers inteiros — é o inverso de qualquer op de splat.
+   * Existe separado porque o undo de splat não é uma transformação incremental:
+   * o mais seguro é repor o estado anterior completo.
+   */
+  | { type: 'splatRestore'; buffers: SplatBuffersJson | null; label: string };
+
+/**
+ * Buffers serializáveis de um splat, para undo/redo.
+ * Arrays viram `number[]` no JSON — o chamador converte de/para Float32Array.
+ */
+export interface SplatBuffersJson {
+  centers: number[];
+  scales: number[];
+  quaternions: number[];
+  opacities: number[];
+  colors: number[];
+}
+
+/** Região 3D serializável (espelha `RegionShape` sem tipos de runtime). */
+export type RegionShapeJson =
+  | { type: 'sphere'; center: [number, number, number]; radius: number }
+  | {
+      type: 'box';
+      center: [number, number, number];
+      size: [number, number, number];
+      rotation?: [number, number, number, number];
+    }
+  | { type: 'plane'; point: [number, number, number]; normal: [number, number, number] };
+
+/** Parâmetros de aparência serializáveis. */
+export interface AppearanceParams {
+  brightness?: number;
+  saturation?: number;
+  temperature?: number;
+  opacity?: number;
+  color?: [number, number, number];
+}
 
 export interface EditorCommand {
   readonly id: string;
@@ -78,6 +149,26 @@ export function invertOp(op: EditorOp): EditorOp {
       return { type: 'setOverlays', previous: op.next, next: op.previous };
     case 'setSceneName':
       return { type: 'setSceneName', name: op.previousName, previousName: op.name };
+    case 'splatDelete':
+    case 'splatCrop':
+    case 'splatDecimate':
+    case 'splatRecenter':
+      // Undo de splat = repor os buffers inteiros do estado anterior.
+      return {
+        type: 'splatRestore',
+        buffers: op.previous,
+        label: `Desfazer ${labelForOp(op)}`,
+      };
+    case 'splatAppearance':
+      return {
+        type: 'splatRestore',
+        buffers: op.previous,
+        label: 'Desfazer ajuste de aparência',
+      };
+    case 'splatRestore':
+      // Restaurar é o inverso de si mesmo no nível do SceneState: os buffers
+      // reais são reaplicados pelo viewer, que guarda o par before/after.
+      return op;
     default:
       return assertNever(op);
   }
@@ -145,6 +236,17 @@ export function applyOp(state: SceneState, op: EditorOp): SceneState {
       draft.name = op.name;
       return draft;
     }
+    case 'splatDelete':
+    case 'splatAppearance':
+    case 'splatCrop':
+    case 'splatDecimate':
+    case 'splatRecenter':
+    case 'splatRestore': {
+      // Edição de splats não altera o grafo de cena serializado (nós, overlays,
+      // calibração). O efeito acontece nos buffers do renderer, aplicado pelo
+      // viewer; aqui marcamos apenas a passagem pelo histórico.
+      return draft;
+    }
     default:
       return assertNever(op);
   }
@@ -172,6 +274,18 @@ export function labelForOp(op: EditorOp): string {
       return 'Atualizar overlays';
     case 'setSceneName':
       return 'Renomear cena';
+    case 'splatDelete':
+      return 'Excluir splats';
+    case 'splatAppearance':
+      return 'Ajustar aparência dos splats';
+    case 'splatCrop':
+      return 'Recortar splats';
+    case 'splatDecimate':
+      return 'Decimar splats';
+    case 'splatRecenter':
+      return 'Recentralizar splats';
+    case 'splatRestore':
+      return op.label;
     default:
       return assertNever(op);
   }

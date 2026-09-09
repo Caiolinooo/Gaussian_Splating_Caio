@@ -70,6 +70,15 @@ def test_resolve_master_ply_falls_back_to_train(tmp_path: Path) -> None:
     assert found == newer
 
 
+def test_resolve_master_ply_prefers_step_29999_over_lexical_6999(tmp_path: Path) -> None:
+    train = tmp_path / "train" / "ply"
+    train.mkdir(parents=True)
+    write_binary_ply(train / "point_cloud_6999.ply", points=[(0.0, 0.0, 0.0)])
+    newest = write_binary_ply(train / "point_cloud_29999.ply", points=[(1.0, 0.0, 0.0)])
+    found = resolve_master_ply(MeshProxyContext(work_dir=tmp_path))
+    assert found == newest
+
+
 def test_missing_ply_is_explained(tmp_path: Path) -> None:
     with pytest.raises(MeshProxyError) as caught:
         meshproxy_stage(MeshProxyContext(work_dir=tmp_path, min_points=1))
@@ -77,13 +86,14 @@ def test_missing_ply_is_explained(tmp_path: Path) -> None:
     assert "ply" in caught.value.user_message.lower()
 
 
-def test_stage_accepts_mapping_context(tmp_path: Path) -> None:
+def test_stage_accepts_mapping_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     export_dir = tmp_path / "export"
     export_dir.mkdir()
     write_binary_ply(
         export_dir / "master.ply",
         points=[(0.0, 0.0, 0.0)],
     )
+    monkeypatch.setattr("pipeline.meshproxy.stage.AVAILABLE", True)
     with pytest.raises(MeshProxyError) as caught:
         meshproxy_stage({"work_dir": tmp_path, "min_points": 80})
     assert caught.value.code == "SPARSE_CLOUD"
@@ -109,6 +119,7 @@ def test_stage_metrics_via_monkeypatched_build(
     def _fake_build(*_args: object, **_kwargs: object) -> ProxyBuildResult:
         return fake
 
+    monkeypatch.setattr("pipeline.meshproxy.stage.AVAILABLE", True)
     monkeypatch.setattr("pipeline.meshproxy.stage.build_proxy", _fake_build)
     progress: list[tuple[float, str]] = []
 
@@ -141,3 +152,18 @@ def test_stage_without_open3d_on_dense_cloud(tmp_path: Path) -> None:
             MeshProxyContext(work_dir=tmp_path, min_points=10, density_percentile=0.0)
         )
     assert caught.value.code == "OPEN3D_UNAVAILABLE"
+
+
+def test_stage_rejects_huge_cloud_from_header_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+    write_binary_ply(
+        export_dir / "master.ply",
+        points=grid_points(2, 2, 2),
+        opacities=[2.0] * 8,
+    )
+    monkeypatch.setattr("pipeline.meshproxy.stage.AVAILABLE", True)
+    monkeypatch.setattr("pipeline.meshproxy.stage.MAX_MESHPROXY_VERTICES", 3)
+    with pytest.raises(MeshProxyError) as caught:
+        meshproxy_stage(MeshProxyContext(work_dir=tmp_path, min_points=1))
+    assert caught.value.code == "MESHPROXY_TOO_LARGE"

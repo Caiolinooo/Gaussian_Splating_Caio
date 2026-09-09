@@ -144,6 +144,18 @@ def test_cancel_queued_job(client_as, runtime) -> None:
         runtime.machine.block_run.set()
 
 
+def test_rebuild_done_job(client_as, runtime) -> None:
+    with client_as("user-a") as client:
+        created = client.post("/jobs", files=video_files(), data=job_form(key="rebuild-1"))
+        job_id = created.json()["job_id"]
+        record = runtime.machine.get(job_id)
+        record.state = "done"
+        accepted = client.post(f"/jobs/{job_id}/rebuild")
+        assert accepted.status_code == 202
+        assert accepted.json()["job_id"] == job_id
+        assert runtime.machine.get(job_id).state == "sfm"
+
+
 def test_retry_only_when_error_or_cancelled(client_as, runtime) -> None:
     with client_as("user-a") as client:
         created = client.post("/jobs", files=video_files(), data=job_form(key="retry-1"))

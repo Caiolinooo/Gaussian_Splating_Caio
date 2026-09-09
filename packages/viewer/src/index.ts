@@ -5,9 +5,12 @@ export {
   applyOp,
   invertOp,
   labelForOp,
+  type AppearanceParams as AppearanceParamsJson,
   type EditorCommand,
   type EditorOp,
+  type RegionShapeJson,
   type SceneState,
+  type SplatBuffersJson,
 } from './editing/commands';
 export { createViewerUiStore, type ViewerUiState, type ViewerUiStore } from './editing/editorStore';
 export {
@@ -81,6 +84,24 @@ export {
   type SplatCenterHit,
   type SplatCenterSample,
 } from './picking/splatCenters';
+export * from './selection';
+export {
+  SplatEditor,
+  applyColorAdjust,
+  isInsideRegion,
+  DEFAULT_APPEARANCE,
+  type SplatEditKind,
+  type SplatEditRecord,
+  type SplatEditSnapshot,
+  type SplatEditorHost,
+} from './editing/SplatEditor';
+export {
+  decimateSplats,
+  mergeSplats,
+  type DecimateParams,
+  type DecimateResult,
+  type SplatArrays,
+} from './editing/decimate';
 export {
   createSplatRenderer,
   type CreateSplatRendererOptions,
@@ -103,14 +124,22 @@ export {
 } from './renderer/splatFrame';
 export {
   assertSplatFormat,
+  clampQualityNumber,
   DEFAULT_SPLAT_QUALITY,
   mergeQuality,
+  SPLAT_QUALITY_RANGE,
   toShDegree,
+  type AppearanceParams,
   type BackendReasonCode,
+  type QuatLike,
   type Ray3,
+  type RegionShape,
   type RendererBackendKind,
   type SceneParent,
+  type ScreenRect,
+  type SelectMode,
   type SplatCapabilities,
+  type SplatDataAccessor,
   type SplatFormat,
   type SplatHandle,
   type SplatLoadOptions,
@@ -120,6 +149,7 @@ export {
   type SplatPickOptions,
   type SplatQuality,
   type SplatRenderer,
+  type SplatSelection,
   type SphericalHarmonicsDegree,
   type WorldBox,
 } from './renderer/SplatRenderer';

@@ -254,6 +254,23 @@ def test_retry_resolves_system_python_and_resumes_training(tmp_path: Path, monke
     assert retried.stages["training"].status is StageStatus.PENDING
 
 
+def test_rebuild_done_job_resets_from_sfm(tmp_path: Path) -> None:
+    store = JsonJobStore(tmp_path / "store")
+    machine = JobMachine(store, handlers=_handlers())
+    record = machine.create(_spec(tmp_path, key=None))
+    done = machine.run(record.job_id)
+    assert done.state is JobState.DONE
+
+    rebuilt = machine.rebuild(record.job_id, from_stage="sfm")
+    assert rebuilt.state is JobState.SFM
+    assert rebuilt.train.max_steps == 30_000
+    assert rebuilt.train.data_factor == 2
+    assert rebuilt.colmap.sift_max_num_features == 8192
+    assert rebuilt.stages["extracting"].status is StageStatus.DONE
+    assert rebuilt.stages["sfm"].status is StageStatus.PENDING
+    assert rebuilt.stages["training"].status is StageStatus.PENDING
+
+
 def test_cancel_queued_and_mid_run(tmp_path: Path) -> None:
     store = JsonJobStore(tmp_path / "store")
     machine = JobMachine(store, handlers=_handlers())

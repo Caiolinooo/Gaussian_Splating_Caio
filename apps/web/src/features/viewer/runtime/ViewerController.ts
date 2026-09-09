@@ -4,18 +4,27 @@ import {
   createOpenCvToThreeTRS,
   createSplatRenderer,
   createTRS,
+  DEFAULT_SPLAT_QUALITY,
   interpolateCamera,
   pickClosest,
   pickMeshes,
+  pointInPolygon,
+  pointInRect,
+  projectCenter,
   relightRgb,
   SceneManager,
+  SelectionManager,
+  SplatEditor,
   toShDegree,
   TransformGizmo,
+  type AppearanceParams,
   type CalibrationJson,
   type LengthUnit,
   type RelightJson,
   type RelightParams,
   type RendererBackendKind,
+  type SelectMode,
+  type SplatEditSnapshot,
   type SplatFormat,
   type SplatHandle,
   type SplatQuality,
@@ -88,6 +97,20 @@ export class ViewerController {
 
   private readonly tapeVisuals: TapeVisuals;
   private readonly selectionHelper: THREE.BoxHelper;
+  /** Seleção de splats ativa (C1). */
+  private readonly splatSelection = new SelectionManager();
+  private readonly selectionVisuals: { update(indices: Uint32Array): void } | null = null;
+  /** Editor de splats — criado depois que o renderer sobe (precisa dos dados). */
+  private splatEditor: SplatEditor | null = null;
+  /** Histórico próprio de edições de splat (buffers inteiros, não SceneState). */
+  private splatHistory: {
+    kind: 'splatDelete' | 'splatAppearance' | 'splatDecimate';
+    label: string;
+    before: SplatEditSnapshot;
+    extra: Record<string, unknown>;
+  }[] = [];
+  /** Amostra de centros em espaço de mundo, para o fallback de seleção na CPU. */
+  private splatCenters: { index: number; center: { x: number; y: number; z: number } }[] = [];
   private readonly viewerUnits = createViewerUnitsPort();
   private readonly objectUrls = new Set<string>();
   private resizeObserver: ResizeObserver | null = null;
@@ -207,6 +230,7 @@ export class ViewerController {
         { force: options.forceBackend },
       );
       this.splatRenderer = created.renderer;
+      this.splatEditor = new SplatEditor({ renderer: created.renderer });
       store.setBackend(created.detection);
       store.setQuality(this.splatRenderer.getQuality());
     } catch (error) {
@@ -313,6 +337,268 @@ export class ViewerController {
     }
     this.splatRenderer.setQuality(patch);
     useViewerStore.getState().setQuality(this.splatRenderer.getQuality());
+  }
+
+  /**
+   * Volta as knobs de nitidez ao padrão anti-smearing (C0).
+   * Preserva SH degree e alphaRemovalThreshold, que são escolha do usuário.
+   */
+  resetSharpness(): void {
+    this.setQuality({
+      blurAmount: DEFAULT_SPLAT_QUALITY.blurAmount,
+      preBlurAmount: DEFAULT_SPLAT_QUALITY.preBlurAmount,
+      focalAdjustment: DEFAULT_SPLAT_QUALITY.focalAdjustment,
+      maxStdDev: DEFAULT_SPLAT_QUALITY.maxStdDev,
+      clipXY: DEFAULT_SPLAT_QUALITY.clipXY,
+      falloff: DEFAULT_SPLAT_QUALITY.falloff,
+      minPixelRadius: DEFAULT_SPLAT_QUALITY.minPixelRadius,
+      minSortIntervalMs: DEFAULT_SPLAT_QUALITY.minSortIntervalMs,
+      sortRadial: DEFAULT_SPLAT_QUALITY.sortRadial,
+    });
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Edição de splats (C1 — corte de floaters)
+   * ---------------------------------------------------------------- */
+
+  /** Seleção ativa (índices no splat de fundo). Vazia se nenhuma. */
+  getSplatSelection(): Uint32Array {
+    return this.splatSelection.snapshot();
+  }
+
+  getSplatSelectionCount(): number {
+    return this.splatSelection.getCount();
+  }
+
+  clearSplatSelection(): void {
+    this.splatSelection.clear();
+    this.syncSelectionVisuals();
+  }
+
+  /**
+   * Seleciona splats desenhando um retângulo na tela (pixels, origem topo-esquerdo).
+   * Usa a matriz viewProjection atual — portanto depende da câmera no momento.
+   */
+  selectSplatsByRect(
+    rect: { x: number; y: number; width: number; height: number },
+    mode: SelectMode = 'replace',
+  ): number {
+    return this.runScreenSelect(rect, null, mode);
+  }
+
+  /** Idem, com polígono livre (lasso) em pixels. */
+  selectSplatsByLasso(
+    points: { x: number; y: number }[],
+    mode: SelectMode = 'replace',
+  ): number {
+    if (points.length < 3) {
+      return this.splatSelection.getCount();
+    }
+    return this.runScreenSelect(null, points, mode);
+  }
+
+  /** Remove os splats selecionados (limpeza de floaters). */
+  deleteSelectedSplats(): number {
+    if (!this.splatRenderer?.deleteSplats || !this.splatHandle) {
+      return 0;
+    }
+    const indices = this.splatSelection.snapshot();
+    if (indices.length === 0) {
+      return 0;
+    }
+    const before = this.splatEditor?.snapshot('Excluir splats') ?? null;
+    this.splatRenderer.deleteSplats({ handle: this.splatHandle, indices, count: indices.length });
+    if (before) {
+      this.pushSplatHistory('splatDelete', before, { indices: Array.from(indices) });
+    }
+    this.splatSelection.clear();
+    this.syncSelectionVisuals();
+    const removed = indices.length;
+    useViewerStore.getState().setHud({
+      gaussianCount: this.splatRenderer.getGaussianCount(this.splatHandle),
+    });
+    return removed;
+  }
+
+  /** Ajusta brilho/saturação/temperatura/opacidade da seleção. */
+  adjustSelectedAppearance(params: AppearanceParams): void {
+    if (!this.splatRenderer?.adjustAppearance || !this.splatHandle) {
+      return;
+    }
+    const indices = this.splatSelection.snapshot();
+    if (indices.length === 0) {
+      return;
+    }
+    const before = this.splatEditor?.snapshot('Ajustar aparência') ?? null;
+    this.splatRenderer.adjustAppearance(
+      { handle: this.splatHandle, indices, count: indices.length },
+      params,
+    );
+    if (before) {
+      this.pushSplatHistory('splatAppearance', before, { params });
+    }
+  }
+
+  /** Decima a cena fundindo gaussianas similares até ~`target`. */
+  async decimateSplats(target: number): Promise<number | null> {
+    if (!this.splatRenderer?.decimateSplats || !this.splatHandle) {
+      return null;
+    }
+    const before = this.splatEditor?.snapshot('Decimar splats') ?? null;
+    const count = await this.splatRenderer.decimateSplats(this.splatHandle, target);
+    if (before) {
+      this.pushSplatHistory('splatDecimate', before, { target });
+    }
+    useViewerStore.getState().setHud({
+      gaussianCount: this.splatRenderer.getGaussianCount(this.splatHandle),
+    });
+    return count;
+  }
+
+  /** Desfaz a última edição de splat (se houver). */
+  undoSplatEdit(): boolean {
+    const record = this.splatHistory.pop();
+    if (!record) {
+      return false;
+    }
+    this.splatEditor?.restore(record.before);
+    this.syncSelectionVisuals();
+    if (this.splatHandle) {
+      useViewerStore.getState().setHud({
+        gaussianCount: this.splatRenderer?.getGaussianCount(this.splatHandle) ?? 0,
+      });
+    }
+    return true;
+  }
+
+  get canUndoSplatEdit(): boolean {
+    return this.splatHistory.length > 0;
+  }
+
+  private runScreenSelect(
+    rect: { x: number; y: number; width: number; height: number } | null,
+    polygon: { x: number; y: number }[] | null,
+    mode: SelectMode,
+  ): number {
+    if (!this.splatRenderer || !this.splatHandle) {
+      return this.splatSelection.getCount();
+    }
+    const canvas = this.canvas;
+    const width = canvas.clientWidth || 1;
+    const height = canvas.clientHeight || 1;
+    this.camera.updateMatrixWorld();
+    const viewProjection = new THREE.Matrix4().multiplyMatrices(
+      this.camera.projectionMatrix,
+      this.camera.matrixWorldInverse,
+    );
+
+    const incoming =
+      rect !== null
+        ? this.screenSelectRect(rect, viewProjection, width, height)
+        : polygon !== null
+          ? this.screenSelectPolygon(polygon, viewProjection, width, height)
+          : new Uint32Array(0);
+
+    this.splatSelection.apply(incoming, mode);
+    this.syncSelectionVisuals();
+    return this.splatSelection.getCount();
+  }
+
+  /** Projeta os centros e testa contenção — roda no backend quando disponível. */
+  private screenSelectRect(
+    rect: { x: number; y: number; width: number; height: number },
+    viewProjection: THREE.Matrix4,
+    width: number,
+    height: number,
+  ): Uint32Array {
+    if (this.splatRenderer?.selectByRect && this.splatHandle) {
+      const selection = this.splatRenderer.selectByRect(
+        this.splatHandle,
+        rect,
+        viewProjection.elements,
+        { width, height },
+        'replace',
+      );
+      return selection.indices;
+    }
+    return this.projectAndTest(
+      (point) => pointInRect(point.px, point.py, rect),
+      viewProjection,
+      width,
+      height,
+    );
+  }
+
+  private screenSelectPolygon(
+    polygon: { x: number; y: number }[],
+    viewProjection: THREE.Matrix4,
+    width: number,
+    height: number,
+  ): Uint32Array {
+    if (this.splatRenderer?.selectByLasso && this.splatHandle) {
+      const selection = this.splatRenderer.selectByLasso(
+        this.splatHandle,
+        polygon,
+        viewProjection.elements,
+        { width, height },
+        'replace',
+      );
+      return selection.indices;
+    }
+    return this.projectAndTest(
+      (point) => pointInPolygon(point.px, point.py, polygon),
+      viewProjection,
+      width,
+      height,
+    );
+  }
+
+  /** Fallback puro: percorre os centros conhecidos e projeta na CPU. */
+  private projectAndTest(
+    test: (point: { px: number; py: number }) => boolean,
+    viewProjection: THREE.Matrix4,
+    width: number,
+    height: number,
+  ): Uint32Array {
+    const hits: number[] = [];
+    const m = viewProjection.elements;
+    for (const sample of this.splatCenters) {
+      const point = projectCenter(
+        sample.center.x,
+        sample.center.y,
+        sample.center.z,
+        m,
+        { width, height },
+      );
+      if (point.visible && test(point)) {
+        hits.push(sample.index);
+      }
+    }
+    hits.sort((a, b) => a - b);
+    return new Uint32Array(hits);
+  }
+
+  private pushSplatHistory(
+    kind: 'splatDelete' | 'splatAppearance' | 'splatDecimate',
+    before: SplatEditSnapshot,
+    extra: Record<string, unknown>,
+  ): void {
+    this.splatHistory.push({
+      kind,
+      label: before.label,
+      before,
+      extra,
+    });
+    if (this.splatHistory.length > 50) {
+      this.splatHistory.shift();
+    }
+    useViewerStore.getState().markDirty(true);
+  }
+
+  /** Realça os splats selecionados (tint) — degrada para nada se não houver. */
+  private syncSelectionVisuals(): void {
+    const indices = this.splatSelection.snapshot();
+    this.selectionVisuals?.update(indices);
   }
 
   setPlaybackTime(normalized: number): void {

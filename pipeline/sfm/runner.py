@@ -282,6 +282,7 @@ def _finalize_models(
     return "\n".join(chunks), origin
 
 
+
 def run_sfm(
     config: ColmapConfig,
     paths: ColmapPaths,
@@ -396,6 +397,38 @@ def run_sfm(
                 index += 1
                 continue
             raise
+
+        # Gate aprovado, mas o ratio de registro ainda é fraco: em vídeo vale
+        # tentar o matcher sequencial, que explora a continuidade temporal que
+        # o exaustivo desperdiça (clipes com pouca paralaxe). Só entra quando
+        # há poses suficientes — se o material é inutilizável, o gate já
+        # reprovou por count acima e não chegamos aqui.
+        if (
+            source_kind == "video"
+            and not sequential_tried
+            and plan.matcher != "sequential"
+            and summary.registered_count >= plan.min_registered_count
+            and summary.ratio < plan.effective_min_registered_ratio(source_kind)
+        ):
+            sequential_tried = True
+            plans.append(replace(plan, matcher="sequential"))
+            LOGGER.warning(
+                "event=colmap_sequential_weak_ratio registered=%s total=%s ratio=%.2f",
+                summary.registered_count,
+                summary.input_image_count,
+                summary.ratio,
+            )
+            _append_log(
+                paths,
+                "\n===== weak registration ratio; retrying sequential_matcher =====\n",
+            )
+            if progress is not None:
+                progress(
+                    0.0,
+                    "Poucas poses registradas — tentando matcher sequencial de vídeo…",
+                )
+            index += 1
+            continue
 
         _cameras, points = score_reconstruction(paths.model_dir)
         if (

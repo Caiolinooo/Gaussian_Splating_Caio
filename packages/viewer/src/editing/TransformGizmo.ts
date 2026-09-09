@@ -52,6 +52,7 @@ export class TransformGizmo {
   ) {
     this.scene = scene;
     this.controls = new TransformControls(camera, domElement);
+    this.controls.enabled = false;
     this.helper = resolveHelper(this.controls);
     this.scene.add(this.helper);
     this.snap = { ...DEFAULT_SNAP, ...options.snap };
@@ -81,11 +82,13 @@ export class TransformGizmo {
   }
 
   attach(object: THREE.Object3D): void {
+    this.controls.enabled = true;
     this.controls.attach(object);
   }
 
   detach(): void {
     this.controls.detach();
+    this.controls.enabled = false;
   }
 
   setMode(mode: TransformMode): void {

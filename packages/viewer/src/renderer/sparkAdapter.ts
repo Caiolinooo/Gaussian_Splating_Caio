@@ -24,9 +24,34 @@ import type { SplatFormat } from './SplatRenderer';
  * 4. `scale` do SplatMesh é uniforme (média xyz) — TRS não-uniforme degrada.
  * 5. Tempo 4D: o controller aplica câmeras COLMAP + offset de clusters; Spark
  *    `recolor` cobre relight SH-env (docs SplatMesh.recolor).
+ * 6. As knobs anti-smearing (`blurAmount`, `preBlurAmount`, `focalAdjustment`,
+ *    `maxStdDev`, `clipXY`, `falloff`, `sortRadial`, `minPixelRadius`,
+ *    `minSortIntervalMs`) são propriedades públicas do `SparkRenderer`
+ *    (v2.1.0) e são re-sincronizadas nos uniforms a cada `onBeforeRender`,
+ *    logo atribuir direto já surte efeito no próximo frame.
  */
 export interface SparkRendererLike {
   minAlpha?: number;
+  /** @default Math.sqrt(8) — encurtar (√5) reduz streaks. */
+  maxStdDev?: number;
+  minPixelRadius?: number;
+  maxPixelRadius?: number;
+  /** Soma à diagonal da covariância 2D antes da decomposição. */
+  preBlurAmount?: number;
+  /** Soma à diagonal da covariância 2D com ajuste de opacidade. */
+  blurAmount?: number;
+  /** 0 = sem falloff (chapado), 1 = gaussiana normal. */
+  falloff?: number;
+  /** 1.0 = clip exato, 1.4 = 40% além do frustum. */
+  clipXY?: number;
+  /** 2.0 reproduz o PlayCanvas/SuperSplat (mais nítido). */
+  focalAdjustment?: number;
+  /** Sort radial (estável sob rotação) vs. Z-depth. */
+  sortRadial?: boolean;
+  /** Intervalo mínimo entre sorts (ms); 0 = sorta todo frame. */
+  minSortIntervalMs?: number;
+  /** Marca o renderer como sujo (re-sort/re-render no próximo frame). */
+  setDirty?: () => void;
   dispose?: () => void;
 }
 

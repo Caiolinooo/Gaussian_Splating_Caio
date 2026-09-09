@@ -4,6 +4,8 @@ import { CalibrationIndicator } from '../../calibration/CalibrationIndicator';
 import { assertNever } from '../assertNever';
 import { useViewerRuntime } from '../runtime/ViewerRuntimeContext';
 import { useViewerStore } from '../store/viewerStore';
+import { SharpnessControls } from './SharpnessControls';
+import { useState } from 'react';
 
 export function ViewerHud() {
   const controller = useViewerRuntime();
@@ -14,6 +16,7 @@ export function ViewerHud() {
   const memoryMb = useViewerStore((state) => state.memoryMb);
   const temporal = useViewerStore((state) => state.temporal);
   const relight = useViewerStore((state) => state.relight);
+  const [showSharpness, setShowSharpness] = useState(false);
 
   const badge = backendBadge(backend?.backend ?? 'none', backend?.webgpu === true);
   const azimuth = relight.azimuthDeg ?? 45;
@@ -37,7 +40,16 @@ export function ViewerHud() {
       <button type="button" onClick={() => controller?.fitToSplat()}>
         Enquadrar
       </button>
+      <button
+        type="button"
+        onClick={() => setShowSharpness((value) => !value)}
+        aria-expanded={showSharpness}
+        title="Controles de nitidez (anti-smearing)"
+      >
+        Nitidez
+      </button>
       {memoryMb !== null && <span>{memoryMb.toFixed(0)} MB</span>}
+      {showSharpness && <SharpnessControls quality={quality} />}
       {temporal.enabled && (
         <label className="gs-scrubber">
           Tempo

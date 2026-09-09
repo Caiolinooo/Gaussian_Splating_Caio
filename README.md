@@ -1,14 +1,14 @@
 # Gaussian Splatting Studio
 
-Versão **0.2.0** — changelog em [`CHANGELOG.md`](./CHANGELOG.md).
+Versão **0.3.0** — changelog em [`CHANGELOG.md`](./CHANGELOG.md).
 
 Plataforma **100% zero-CLI** que transforma **vídeos ou conjuntos de imagens** em **cenas 3D Gaussian Splatting** interativas, editáveis e calibradas em **unidades reais** (m/cm/mm e ft/in). App desktop (Tauri) + UI web (React) + API local (FastAPI) + pipeline GPU (Python/WSL2).
 
 > A fonte de verdade de alto nível — visão, arquitetura, plano faseado, stack e decisões — é o **[`tasks.md`](./tasks.md)**.
 
-## Status atual: 0.2.0 — pipeline no servidor GPU (L4)
+## Status atual: 0.3.0 — editor de splats (anti-smearing + limpeza de floaters)
 
-App de avaliação: **http://vm.groupabz.com:2222** (UI+API, `DEV_AUTH_BYPASS`).
+App de avaliação: **http://vm.groupabz.com:2222** (UI+API, login local). WebGPU: **https://vm.groupabz.com:2223** (mesmo app, TLS).
 
 - Monorepo pnpm com `apps/web`, `apps/api`, `apps/desktop`, `packages/{units,viewer,overlays}`, `pipeline/`, `installer/`, `docs/`.
 - **Provisioner** (`pipeline/provisioner`): detecção real + instalação de FFmpeg/PyTorch+CUDA/gsplat no Linux com GPU. **COLMAP não é compilado nem instalado via apt** — o app localiza o binário do usuário (`which colmap` ou `~/colmap/build/src/colmap/exe/colmap`).
@@ -19,6 +19,39 @@ App de avaliação: **http://vm.groupabz.com:2222** (UI+API, `DEV_AUTH_BYPASS`).
 - **`packages/units`**, **`@gs/viewer`**, **`@gs/overlays`**: unidades, schema de cena, renderer abstrato, overlays v1 (testes Vitest).
 - **Shell desktop** (`apps/desktop`): scaffold **Tauri v2** (Rust não verificado nesta máquina).
 - Qualidade: eslint + prettier, ruff, `.pre-commit-config.yaml` e workflow de CI.
+
+## Editor de splats (0.3.0)
+
+### Anti-smearing: a causa real
+
+O plano original previa um renderer WebGPU nativo com radix sort em WGSL. A
+auditoria do Spark 2.1 mostrou que **ele já faz sort por frame na GPU**
+(`readbackDepth` → `sortSplats32` em worker WASM). O smearing vinha de três
+knobs com defaults ruins:
+
+| Knob | Default do Spark | Correção | Efeito |
+| ---- | ---------------- | -------- | ------ |
+| `blurAmount` | `0.3` | **`0.0`** | Soma ~0,5px na covariância 2D — infla cada gaussiana |
+| `focalAdjustment` | `1.0` | **`2.0`** | 2.0 reproduz o PlayCanvas/SuperSplat |
+| `maxStdDev` | `√8 ≈ 2.83` | **`√5 ≈ 2.24`** | Caudas longas = streaks |
+
+Todas expostas em `SharpnessControls` (botão **Nitidez** no HUD), com
+**Padrão nítido** para voltar aos valores acima.
+
+> Detalhes e o plano completo: [`docs/plan-editorsplat.md`](./docs/plan-editorsplat.md).
+
+### Ferramentas de edição
+
+| Ferramenta | Como usar | Observação |
+| ---------- | --------- | ---------- |
+| **Retângulo** | arraste no canvas | seleção em screen space (projeta os centros) |
+| **Laço** | desenhe no canvas | point-in-polygon por ray casting |
+| **Excluir seleção** | após selecionar | remove floaters |
+| **Decimar** | informe o alvo | merge de gaussianas similares (grid espacial) |
+| **Desfazer** | — | histórico próprio de buffers |
+
+`Esc` cancela a ferramenta ativa. A seleção suporta os modos `replace`, `add`,
+`subtract` e `intersect`.
 
 ## Estrutura de pastas
 
@@ -75,10 +108,11 @@ python -m venv .venv
 
 ```powershell
 pnpm dev:web
-# abre em http://localhost:5173 — a UI de Setup consome a API da porta 8000
+# abre em http://localhost:5173 — o Vite faz proxy da API para
+# http://vm.groupabz.com:2222 (override: GS_API_PROXY)
 ```
 
-A URL da API pode ser alterada via `VITE_API_URL` (ver `apps/web/.env.example`).
+Para apontar direto a outra API, use `VITE_API_URL` (ver `apps/web/.env.example`).
 
 Auth de desenvolvimento (sem Supabase): `DEV_AUTH_BYPASS=1` na API e `VITE_DEV_AUTH_BYPASS=1` na web.
 

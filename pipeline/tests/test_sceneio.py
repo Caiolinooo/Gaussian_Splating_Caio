@@ -148,7 +148,7 @@ def test_handle_ply_skips_sfm_and_training(tmp_path: Path) -> None:
     assert document["schemaVersion"] == 1
     assert document["backgroundSplat"]["format"] == "ply"
     assert document["temporal"]["sourceKind"] == "none"
-    assert document["relight"]["mode"] == "unsupported"
+    assert document["relight"]["mode"] == "sh-env"
     with zipfile.ZipFile(exported.artifacts["scene_package"]) as archive:
         names = set(archive.namelist())
     assert "master.ply" in names

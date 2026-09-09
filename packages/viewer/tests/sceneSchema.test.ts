@@ -87,12 +87,18 @@ const sample = {
     fps: 10,
     currentTime: 0,
     sourceKind: 'gif' as const,
+    times: undefined,
+    cameras: undefined,
+    clusters: undefined,
   },
   relight: {
     enabled: false,
     mode: 'unsupported' as const,
     hasSphericalHarmonics: true,
     shDegree: 2,
+    azimuthDeg: 45,
+    elevationDeg: 35,
+    intensity: 1,
   },
 };
 
@@ -134,7 +140,7 @@ describe('JSON de cena', () => {
       overlays: [],
     });
     expect(parsed.temporal.enabled).toBe(false);
-    expect(parsed.relight.mode).toBe('unsupported');
+    expect(parsed.relight.mode).toBe('sh-env');
   });
 
   it('rejeita schemaVersion desconhecido', () => {

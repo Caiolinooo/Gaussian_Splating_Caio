@@ -19,7 +19,7 @@ from sfm.commands import (
     build_sfm_pipeline_commands,
 )
 from sfm.config import ColmapConfig, ColmapPaths
-from train.commands import build_simple_trainer_command
+from train.commands import artifact_step, build_simple_trainer_command, latest_ply
 from train.config import TrainConfig
 
 
@@ -194,6 +194,17 @@ def test_colmap_dialect_none_omits_gpu_flags() -> None:
     dialect = ColmapCliDialect(extraction_gpu_flag=None, matching_gpu_flag=None)
     commands = build_sfm_pipeline_commands(cfg, paths, source_kind="video", dialect=dialect)
     assert all("use_gpu" not in " ".join(argv) for argv in commands[:2])
+
+
+def test_latest_ply_uses_numeric_step_not_lexical_name(tmp_path: Path) -> None:
+    ply_dir = tmp_path / "ply"
+    ply_dir.mkdir()
+    (ply_dir / "point_cloud_6999.ply").write_bytes(b"old")
+    newest = ply_dir / "point_cloud_29999.ply"
+    newest.write_bytes(b"new")
+    (ply_dir / "point_cloud_14999.ply").write_bytes(b"mid")
+    assert artifact_step(newest) == 29999
+    assert latest_ply(tmp_path) == newest
 
 
 def test_thumbnail_command() -> None:

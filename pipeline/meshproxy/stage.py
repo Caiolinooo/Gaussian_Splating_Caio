@@ -51,6 +51,7 @@ Output:           ``{work_dir}/export/proxy.glb``
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -140,10 +141,27 @@ def resolve_master_ply(context: MeshProxyContext) -> Path:
     if master.is_file():
         return master
 
-    train_hits = sorted(Path(context.work_dir).glob(TRAIN_PLY_GLOB))
+    train_hits = sorted(
+        Path(context.work_dir).glob(TRAIN_PLY_GLOB),
+        key=step_sort_key,
+    )
     if train_hits:
         return train_hits[-1]
     raise missing_ply(str(master))
+
+
+def step_sort_key(path: Path) -> tuple[int, str]:
+    """
+    Ordena `point_cloud_<step>.ply` pelo número do step, não por texto.
+
+    Ordem lexicográfica erra feio: "point_cloud_6999.ply" vem DEPOIS de
+    "point_cloud_29999.ply" porque "6" > "2". Como o último item da lista é o
+    escolhido como mestre, isso fazia o meshproxy usar um checkpoint antigo.
+    """
+    match = re.search(r"(\d+)", path.stem)
+    if match is None:
+        return (-1, path.name)
+    return (int(match.group(1)), path.name)
 
 
 def resolve_out_glb(context: MeshProxyContext) -> Path:

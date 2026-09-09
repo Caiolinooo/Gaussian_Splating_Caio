@@ -111,6 +111,19 @@ def test_pick_largest_model_prefers_more_cameras(tmp_path: Path) -> None:
     assert pick_largest_model(sparse) == gold
 
 
+def test_pick_largest_model_rejects_degenerate_more_cameras(tmp_path: Path) -> None:
+    sparse = tmp_path / "sparse"
+    bloated = sparse / "0"
+    solid = sparse / "2"
+    bloated.mkdir(parents=True)
+    solid.mkdir(parents=True)
+    (bloated / "images.txt").write_text(_images_txt(54), encoding="utf-8")
+    (bloated / "points3D.txt").write_text("# few\n" + "1 0 0 0 0 0 0 0\n" * 37, encoding="utf-8")
+    (solid / "images.txt").write_text(_images_txt(52), encoding="utf-8")
+    (solid / "points3D.txt").write_text("# many\n" + "1 0 0 0 0 0 0 0\n" * 4066, encoding="utf-8")
+    assert pick_largest_model(sparse) == solid
+
+
 def test_summarize_ok_when_ratio_passes() -> None:
     summary = summarize_reconstruction(
         images_txt=IMAGES_TXT,

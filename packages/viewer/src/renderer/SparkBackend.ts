@@ -16,6 +16,7 @@ import {
 } from '../relight/shEnv';
 import {
   DEFAULT_SPLAT_QUALITY,
+  clampQualityNumber,
   mergeQuality,
   resolveLoadUrl,
   type Ray3,
@@ -69,7 +70,7 @@ export class SparkBackend implements SplatRenderer {
     this.spark = new sparkMod.SparkRenderer({ renderer: host.renderer });
     host.scene.add(this.spark);
     this.quality = { ...DEFAULT_SPLAT_QUALITY };
-    this.applyMinAlpha();
+    this.applyRenderKnobs();
     this.capabilities = {
       backend: 'spark',
       webgpu: detection.webgpu,
@@ -188,7 +189,7 @@ export class SparkBackend implements SplatRenderer {
 
   setQuality(quality: Partial<SplatQuality>): void {
     this.quality = mergeQuality(this.quality, quality, 3);
-    this.applyMinAlpha();
+    this.applyRenderKnobs();
     for (const entry of this.entries.values()) {
       entry.mesh.maxSh = this.quality.shDegree;
       entry.mesh.updateGenerator?.();
@@ -282,9 +283,32 @@ export class SparkBackend implements SplatRenderer {
     }
   }
 
-  private applyMinAlpha(): void {
+  /**
+   * Repassa TODAS as knobs de qualidade ao `SparkRenderer` (C0 anti-smearing).
+   *
+   * Os valores passam por `clampQualityNumber` para nunca sair da faixa segura
+   * do shader. `sortRadial` e o re-sort são marcados como sujos via
+   * `setDirty()` para que a mudança apareça já no próximo frame.
+   */
+  private applyRenderKnobs(): void {
+    const q = this.quality;
+    const spark = this.spark;
+
     // TODO(spark): minAlpha é corte de render (0–1), não filtro de load 0–255.
-    this.spark.minAlpha = this.quality.alphaRemovalThreshold / 255;
+    spark.minAlpha = Math.max(0, Math.min(1, q.alphaRemovalThreshold / 255));
+
+    // Anti-smearing: blurAmount 0 + focalAdjustment 2 + maxStdDev √5.
+    spark.blurAmount = clampQualityNumber('blurAmount', q.blurAmount);
+    spark.preBlurAmount = clampQualityNumber('preBlurAmount', q.preBlurAmount);
+    spark.focalAdjustment = clampQualityNumber('focalAdjustment', q.focalAdjustment);
+    spark.maxStdDev = clampQualityNumber('maxStdDev', q.maxStdDev);
+    spark.clipXY = clampQualityNumber('clipXY', q.clipXY);
+    spark.falloff = clampQualityNumber('falloff', q.falloff);
+    spark.minPixelRadius = clampQualityNumber('minPixelRadius', q.minPixelRadius);
+    spark.minSortIntervalMs = clampQualityNumber('minSortIntervalMs', q.minSortIntervalMs);
+    spark.sortRadial = q.sortRadial;
+
+    spark.setDirty?.();
   }
 
   private collectCenters() {

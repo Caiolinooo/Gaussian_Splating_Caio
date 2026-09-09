@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from pipeline.meshproxy.errors import MeshProxyError
-from pipeline.meshproxy.io_ply import PlyFormat, read_gaussian_ply
+from pipeline.meshproxy.io_ply import PlyFormat, ply_vertex_count, read_gaussian_ply
 from ply_fixtures import write_binary_ply
 
 
@@ -31,6 +31,7 @@ def test_reads_centres_and_opacity_logits(tmp_path: Path) -> None:
     assert cloud.ply_format is PlyFormat.BINARY_LE
     assert "f_dc_0" in cloud.property_names
     assert "opacity" in cloud.property_names
+    assert ply_vertex_count(path) == 2
 
 
 def test_reads_normals_when_present(tmp_path: Path) -> None:

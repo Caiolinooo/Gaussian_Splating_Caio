@@ -51,17 +51,32 @@ def build_simple_trainer_command(
     return argv
 
 
+def artifact_step(path: Path) -> int:
+    """Parse the numeric train step out of ``point_cloud_29999.ply`` / ``ckpt_6999_rank0.pt``.
+
+    Lexical ``sorted()`` picks ``point_cloud_6999.ply`` over ``point_cloud_29999.ply``.
+    """
+    for part in reversed(path.stem.split("_")):
+        if part.isdigit():
+            return int(part)
+    return -1
+
+
+def latest_artifact(files: list[Path]) -> Path | None:
+    if not files:
+        return None
+    return max(files, key=lambda path: (artifact_step(path), path.stat().st_mtime))
+
+
 def latest_checkpoint(result_dir: Path) -> Path | None:
     ckpt_dir = result_dir / "ckpts"
     if not ckpt_dir.is_dir():
         return None
-    files = sorted(ckpt_dir.glob("ckpt_*.pt"))
-    return files[-1] if files else None
+    return latest_artifact(list(ckpt_dir.glob("ckpt_*.pt")))
 
 
 def latest_ply(result_dir: Path) -> Path | None:
     ply_dir = result_dir / "ply"
     if not ply_dir.is_dir():
         return None
-    files = sorted(ply_dir.glob("point_cloud_*.ply"))
-    return files[-1] if files else None
+    return latest_artifact(list(ply_dir.glob("point_cloud_*.ply")))

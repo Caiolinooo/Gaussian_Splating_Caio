@@ -41,16 +41,80 @@ export interface SplatLoadOptions {
 /**
  * Qualidade de rasterização compartilhada pelos backends.
  * `alphaRemovalThreshold` segue a escala MkKellogg (0–255).
+ *
+ * Os campos anti-smearing (`blurAmount`, `preBlurAmount`, `focalAdjustment`,
+ * `maxStdDev`, `clipXY`, `falloff`) espelham as knobs homônimas do
+ * `SparkRenderer`. São ignorados pelo MkKellogg (não expõe equivalentes).
  */
 export interface SplatQuality {
   shDegree: SphericalHarmonicsDegree;
   alphaRemovalThreshold: number;
+  /**
+   * Soma à diagonal da covariância 2D — "blur" de cada gaussiana em px².
+   * 0.3 é o default do Spark e o correto para cenas treinadas SEM o tweak de
+   * anti-aliasing; **0.0 é o correto para cenas treinadas com anti-aliasing**.
+   * É a causa nº 1 de smearing: infla cada splat em ~0.5px de raio.
+   */
+  blurAmount: number;
+  /** Idem `blurAmount`, aplicado antes da decomposição de covariância. */
+  preBlurAmount: number;
+  /**
+   * Escala o tamanho projetado do splat. 1.0 = comportamento legado;
+   * 2.0 reproduz o PlayCanvas/SuperSplat (mais nítido).
+   */
+  focalAdjustment: number;
+  /** Desvios-padrão máximos renderizados. √8≈2.83 (default Spark) tem caudas
+   *  longas; SuperSplat fica perto de √5≈2.24. Encurtar reduz streaks. */
+  maxStdDev: number;
+  /** Fator de clip XY no frustum (1.0 = exato, 1.4 = 40% além). */
+  clipXY: number;
+  /** Modula o decaimento do kernel: 1 = gaussiana normal, 0 = chapado. */
+  falloff: number;
+  /** Sort radial (geométrico, estável sob rotação) vs. por Z-depth. */
+  sortRadial: boolean;
+  /** Raio mínimo em px para um splat ser desenhado. */
+  minPixelRadius: number;
+  /** Intervalo mínimo entre sorts (ms). 0 = sortar todo frame. */
+  minSortIntervalMs: number;
 }
 
 export const DEFAULT_SPLAT_QUALITY: SplatQuality = Object.freeze({
   shDegree: 3,
   alphaRemovalThreshold: 1,
+  // Anti-smearing: ver docs/plan-editorsplat.md §2.
+  blurAmount: 0,
+  preBlurAmount: 0,
+  focalAdjustment: 2,
+  maxStdDev: Math.sqrt(5),
+  clipXY: 1.4,
+  falloff: 1,
+  sortRadial: true,
+  minPixelRadius: 0,
+  minSortIntervalMs: 0,
 });
+
+/** Limites seguros para a UI (evita valores que quebram o shader). */
+export const SPLAT_QUALITY_RANGE = Object.freeze({
+  blurAmount: { min: 0, max: 1, step: 0.01 },
+  preBlurAmount: { min: 0, max: 1, step: 0.01 },
+  focalAdjustment: { min: 0.5, max: 3, step: 0.05 },
+  maxStdDev: { min: 1, max: 4, step: 0.05 },
+  clipXY: { min: 1, max: 2, step: 0.05 },
+  falloff: { min: 0, max: 1, step: 0.01 },
+  minPixelRadius: { min: 0, max: 4, step: 0.05 },
+  minSortIntervalMs: { min: 0, max: 200, step: 1 },
+});
+
+export function clampQualityNumber(
+  key: keyof typeof SPLAT_QUALITY_RANGE,
+  value: number,
+): number {
+  const range = SPLAT_QUALITY_RANGE[key];
+  if (!Number.isFinite(value)) {
+    return DEFAULT_SPLAT_QUALITY[key];
+  }
+  return Math.max(range.min, Math.min(range.max, value));
+}
 
 /** AABB em espaço de mundo para enquadrar a câmera no splat. */
 export interface WorldBox {
@@ -104,9 +168,67 @@ export interface Ray3 {
   direction: Vec3;
 }
 
+/* ------------------------------------------------------------------ *
+ * Seleção e edição de splats (C1).
+ * ------------------------------------------------------------------ */
+
+/** Região retangular em pixels de tela (origem topo-esquerdo). */
+export interface ScreenRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Modo de composição da seleção. */
+export type SelectMode = 'replace' | 'add' | 'subtract' | 'intersect';
+
+/** Conjunto de splats selecionados (índices no splat do handle). */
+export interface SplatSelection {
+  readonly handle: SplatHandle;
+  readonly indices: Uint32Array;
+  readonly count: number;
+}
+
+/** Ajustes visuais aplicáveis a uma seleção. */
+export interface AppearanceParams {
+  brightness?: number;
+  saturation?: number;
+  temperature?: number;
+  opacity?: number;
+  /** Cor sólida (RGB 0–1) — usada por `SET_RGB`. */
+  color?: [number, number, number];
+}
+
+/** Acesso aos dados brutos de um splat (para export/decimação). */
+export interface SplatDataAccessor {
+  readonly count: number;
+  centers: Float32Array;
+  scales: Float32Array;
+  quaternions: Float32Array;
+  opacities: Float32Array;
+  colors: Float32Array;
+}
+
+/** Forma 3D usada nas operações de corte/recorte. */
+export type RegionShape =
+  | { type: 'sphere'; center: Vec3; radius: number }
+  | { type: 'box'; center: Vec3; size: Vec3; rotation?: QuatLike }
+  | { type: 'plane'; point: Vec3; normal: Vec3 };
+
+export interface QuatLike {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}
+
 /**
  * Contrato único do renderer de splats.
  * Spark (primário) e @mkkellogg/gaussian-splats-3d (fallback) implementam esta interface.
+ *
+ * Os métodos marcados com `?` são capacidades opcionais: hoje só o Spark
+ * implementa edição de splats. A UI degrada escondendo o que falta.
  */
 export interface SplatRenderer {
   readonly kind: RendererBackendKind;
@@ -170,6 +292,48 @@ export interface SplatRenderer {
   /** AABB em mundo do splat (ou do primeiro carregado). Null se ainda vazio. */
   getWorldBounds(handle?: SplatHandle): WorldBox | null;
 
+  /* --- Seleção e edição (C1) — opcionais, só Spark por ora --- */
+
+  /** Seleciona splats cujo centro projetado cai no retângulo de tela. */
+  selectByRect?(
+    handle: SplatHandle,
+    rect: ScreenRect,
+    viewProjection: ArrayLike<number>,
+    viewport: { width: number; height: number },
+    mode: SelectMode,
+  ): SplatSelection;
+
+  /** Seleciona splats cujo centro projetado cai dentro do polígono (lasso). */
+  selectByLasso?(
+    handle: SplatHandle,
+    points: { x: number; y: number }[],
+    viewProjection: ArrayLike<number>,
+    viewport: { width: number; height: number },
+    mode: SelectMode,
+  ): SplatSelection;
+
+  /** Seleciona splats dentro de uma região 3D. */
+  selectByRegion?(
+    handle: SplatHandle,
+    shape: RegionShape,
+    mode: SelectMode,
+  ): SplatSelection;
+
+  /** Remove splats selecionados (limpeza de floaters). */
+  deleteSplats?(selection: SplatSelection): void;
+
+  /** Ajustes visuais por seleção (brightness/saturation/temperature/opacity). */
+  adjustAppearance?(selection: SplatSelection, params: AppearanceParams): void;
+
+  /** Mantém apenas o que está dentro da região (corta o resto). */
+  cropToRegion?(handle: SplatHandle, shape: RegionShape, invert?: boolean): void;
+
+  /** Decimação: merge de gaussianas similares até ~`target`. */
+  decimateSplats?(handle: SplatHandle, target: number): Promise<number>;
+
+  /** Snapshot dos dados brutos (para export e decimação). */
+  getSplatData?(handle: SplatHandle): SplatDataAccessor | null;
+
   /** Libera GPU, workers e object URLs. */
   dispose(): void;
 }
@@ -186,6 +350,27 @@ export function mergeQuality(
   return {
     shDegree,
     alphaRemovalThreshold: Math.max(0, Math.min(255, alpha)),
+    blurAmount: clampQualityNumber('blurAmount', patch.blurAmount ?? current.blurAmount),
+    preBlurAmount: clampQualityNumber(
+      'preBlurAmount',
+      patch.preBlurAmount ?? current.preBlurAmount,
+    ),
+    focalAdjustment: clampQualityNumber(
+      'focalAdjustment',
+      patch.focalAdjustment ?? current.focalAdjustment,
+    ),
+    maxStdDev: clampQualityNumber('maxStdDev', patch.maxStdDev ?? current.maxStdDev),
+    clipXY: clampQualityNumber('clipXY', patch.clipXY ?? current.clipXY),
+    falloff: clampQualityNumber('falloff', patch.falloff ?? current.falloff),
+    sortRadial: patch.sortRadial ?? current.sortRadial,
+    minPixelRadius: clampQualityNumber(
+      'minPixelRadius',
+      patch.minPixelRadius ?? current.minPixelRadius,
+    ),
+    minSortIntervalMs: clampQualityNumber(
+      'minSortIntervalMs',
+      patch.minSortIntervalMs ?? current.minSortIntervalMs,
+    ),
   };
 }
 

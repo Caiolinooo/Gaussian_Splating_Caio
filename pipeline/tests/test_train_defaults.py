@@ -1,27 +1,28 @@
-"""Defaults rápidos de avaliação L4 (3500 passos, adaptativo por frames)."""
+"""Defaults de qualidade L4 (15k passos, data_factor=2, SH 3, scale_reg)."""
 
 from pathlib import Path
 
-from train.config import EVAL_DEFAULT_STEPS, TrainConfig, resolve_eval_train_steps
+from train.config import QUALITY_DEFAULT_STEPS, TrainConfig, resolve_eval_train_steps
 from train.errors import trainer_failed
 from train.runner import ensure_data_factor_images, persist_trainer_log
 
 
-def test_train_config_defaults_are_eval_fast() -> None:
+def test_train_config_defaults_are_quality() -> None:
     cfg = TrainConfig()
-    assert cfg.max_steps == EVAL_DEFAULT_STEPS == 3500
-    assert cfg.save_steps == (3500,)
-    assert cfg.eval_steps == (3500,)
-    assert cfg.ply_steps == (3500,)
+    assert cfg.max_steps == QUALITY_DEFAULT_STEPS == 30_000
+    assert cfg.data_factor == 2
+    assert cfg.save_steps == (15_000, 30_000)
+    assert cfg.ply_steps == (15_000, 30_000)
     assert cfg.disable_video is True
+    assert "--scale_reg" in cfg.extra_args
 
 
 def test_resolve_eval_train_steps_adapts_only_default() -> None:
-    assert resolve_eval_train_steps(40, 3500) == 3000
-    assert resolve_eval_train_steps(150, 3500) == 3500
-    assert resolve_eval_train_steps(400, 3500) == 4000
-    assert resolve_eval_train_steps(40, 7000) == 7000
+    assert resolve_eval_train_steps(40, 30_000) == 15_000
+    assert resolve_eval_train_steps(150, 30_000) == 30_000
     assert resolve_eval_train_steps(400, 30_000) == 30_000
+    assert resolve_eval_train_steps(40, 7000) == 7000
+    assert resolve_eval_train_steps(400, 12_000) == 12_000
 
 
 def test_ensure_data_factor_images_symlinks_when_missing(tmp_path: Path) -> None:
@@ -30,8 +31,8 @@ def test_ensure_data_factor_images_symlinks_when_missing(tmp_path: Path) -> None
     (images / "frame.jpg").write_bytes(b"x")
     dest = ensure_data_factor_images(tmp_path, 4)
     assert dest is not None
-    assert dest.is_symlink()
-    assert dest.resolve() == images.resolve()
+    assert dest.exists()
+    assert (dest / "frame.jpg").is_file()
     assert ensure_data_factor_images(tmp_path, 4) == dest
 
 

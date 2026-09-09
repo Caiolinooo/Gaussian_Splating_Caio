@@ -106,7 +106,6 @@ def fit_planes(
         if plane is None or len(plane.inliers) < min_inliers:
             break
         planes.append(plane)
-        kept = {id(p) for p in plane.inliers}
         # inliers are value tuples; filter by distance instead
         remaining = [p for p in remaining if abs(_signed_dist(p, plane)) > dist_thresh]
     return planes

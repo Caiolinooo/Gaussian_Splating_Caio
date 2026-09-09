@@ -252,7 +252,11 @@ def handle_training(record: JobRecord, progress: Callable[[float, str], None], r
         points3d_txt=sfm_model / "points3D.txt" if (sfm_model / "points3D.txt").is_file() else None,
         images_txt=sfm_model / "images.txt" if (sfm_model / "images.txt").is_file() else None,
         frame_count=kept_frames,
-        duration_s=prior_temporal.get("durationS") if isinstance(prior_temporal.get("durationS"), (int, float)) else None,
+        duration_s=(
+            prior_temporal.get("durationS")
+            if isinstance(prior_temporal.get("durationS"), (int, float))
+            else None
+        ),
         fps=prior_temporal.get("fps") if isinstance(prior_temporal.get("fps"), (int, float)) else None,
         source_kind=str(prior_temporal.get("sourceKind") or record.source.kind.value),
         frames_dir=paths.kept_frames_dir if paths.kept_frames_dir.is_dir() else paths.frames_dir,

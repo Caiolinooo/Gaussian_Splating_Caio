@@ -1,4 +1,4 @@
-"""PipelineAutocal never fails the job; ColmapDepthProvider is a documented stub."""
+"""PipelineAutocal never fails the job; ColmapDepthProvider reads sparse SfM."""
 
 from __future__ import annotations
 
@@ -27,12 +27,43 @@ def _context(tmp_path: Path, *, height: float = 1.75) -> AutocalContext:
     )
 
 
-def test_colmap_depth_provider_is_stub() -> None:
+def _write_colmap_model(model: Path) -> None:
+    model.mkdir(parents=True)
+    (model / "cameras.txt").write_text(
+        "# CAMERA_ID, MODEL, WIDTH, HEIGHT, PARAMS[]\n1 PINHOLE 100 100 50 50 50 50\n",
+        encoding="utf-8",
+    )
+    (model / "images.txt").write_text(
+        "# IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n"
+        "1 1 0 0 0 0 0 2 1 frame.jpg\n"
+        "50 50 1\n",
+        encoding="utf-8",
+    )
+    (model / "points3D.txt").write_text(
+        "# POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[]\n1 0 0 4 0 0 0 0\n",
+        encoding="utf-8",
+    )
+
+
+def test_colmap_depth_provider_empty_is_none() -> None:
     provider = ColmapDepthProvider()
     assert provider.sample_depth("f", 0.5, 0.5, image_size=(1920, 1080)) is None
     assert (
         provider.person_height_scene_units("f", (0.5, 0.1), (0.5, 0.9), (1920, 1080)) is None
     )
+
+
+def test_colmap_depth_provider_samples_sparse_z(tmp_path: Path) -> None:
+    model = tmp_path / "sparse"
+    _write_colmap_model(model)
+    provider = ColmapDepthProvider(model)
+    sample = provider.sample_depth("frame.jpg", 0.5, 0.5, image_size=(100, 100))
+    assert sample is not None
+    assert sample.focal_length_y_px == 50
+    assert sample.depth_scene_units == pytest.approx(6.0)
+    assert sample.is_heuristic is False
+    height = provider.person_height_scene_units("frame.jpg", (0.5, 0.1), (0.5, 0.9), (100, 100))
+    assert height == pytest.approx(80 * 6.0 / 50)
 
 
 def test_pipeline_autocal_never_raises(tmp_path: Path) -> None:

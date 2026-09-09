@@ -180,7 +180,13 @@ def _motion_cluster(
 ) -> dict[str, Any]:
     centroid = _centroid(plane.inliers)
     resolved = keys if keys else [{"t": [0.0, 0.0, 0.0], "r": [0.0, 0.0, 0.0]} for _ in times]
-    moving = any(abs(float((item.get("t") or [0, 0, 0])[0])) + abs(float((item.get("t") or [0, 0, 0])[1])) + abs(float((item.get("t") or [0, 0, 0])[2])) > 1e-6 for item in resolved)
+    def _translation(item: dict) -> tuple[float, float, float]:
+        raw = item.get("t") or [0, 0, 0]
+        return (float(raw[0]), float(raw[1]), float(raw[2]))
+
+    moving = any(
+        abs(t[0]) + abs(t[1]) + abs(t[2]) > 1e-6 for t in map(_translation, resolved)
+    )
     return {
         "id": f"cluster-{index}",
         "kind": "rigs-rigid" if moving else "rigid-plane",

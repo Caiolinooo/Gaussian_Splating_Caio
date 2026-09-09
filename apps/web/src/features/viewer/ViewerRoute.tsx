@@ -11,9 +11,11 @@ import { OverlayEditor } from '../overlays/OverlayEditor';
 import '../overlays/overlays.css';
 import { CameraPresetsBar } from './components/CameraPresetsBar';
 import { LoadProgress } from './components/LoadProgress';
+import { SplatEditToolbar } from './components/SplatEditToolbar';
 import { ViewerHud } from './components/ViewerHud';
 import { WorkspaceToolBar } from './components/WorkspaceToolBar';
 import { useViewerStore } from './store/viewerStore';
+import { useSplatSelection } from './runtime/SplatSelectionContext';
 import type { ViewerRouteProps } from './types';
 import { ViewerScreen } from './ViewerScreen';
 
@@ -29,6 +31,7 @@ export function ViewerRoute(props: ViewerRouteProps = {}) {
 }
 
 function ViewerChrome() {
+  const bridge = useSplatSelection();
   const tool = useViewerStore((state) => state.workspaceTool);
   const showEdit = tool === 'edit';
   const showTape = tool === 'tape';
@@ -55,6 +58,7 @@ function ViewerChrome() {
           {showOverlay ? <OverlayEditor /> : null}
         </aside>
       ) : null}
+      {showEdit ? <SplatEditToolbar tool={bridge.tool} setTool={bridge.setTool} /> : null}
       <div className="gs-chrome gs-chrome-bottom">
         <ViewerHud />
       </div>

@@ -7,7 +7,64 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+Nada ainda.
+
+## [0.3.0] - 2026-09-09
+
+Editor de splats: correção real do smearing (C0) + ferramentas de seleção e
+limpeza de floaters (C1). Sincronização do trabalho desenvolvido no servidor GPU.
+
 ### Adicionado
+
+- **Anti-smearing (C0)**: `SplatQuality` ganha 9 knobs de rasterização
+  (`blurAmount`, `preBlurAmount`, `focalAdjustment`, `maxStdDev`, `clipXY`,
+  `falloff`, `sortRadial`, `minPixelRadius`, `minSortIntervalMs`), com defaults
+  nítidos: `blurAmount: 0`, `focalAdjustment: 2` (como o PlayCanvas/SuperSplat) e
+  `maxStdDev: √5`. `SparkBackend.applyRenderKnobs()` repassa tudo ao SparkRenderer
+  a cada `setQuality`. Faixas de segurança em `SPLAT_QUALITY_RANGE` +
+  `clampQualityNumber`. UI em `SharpnessControls` (sliders + "Padrão nítido").
+- **Seleção de splats (C1)**: módulo puro `selection/` — `projectCenter` (screen
+  space), `pointInRect`/`pointInPolygon` (ray casting)/`pointInSphere`/`pointInBox`,
+  `composeSelection` (replace/add/subtract/intersect) e `SelectionManager` com
+  busca binária e AABB da seleção.
+- **Edição de splats (C1)**: `SplatEditor` com delete, ajuste de aparência
+  (brilho/saturação/temperatura/opacidade), recorte por região e recentralização.
+  `decimate.ts` faz merge de gaussianas similares via grid espacial (testes de
+  escala, cor e distância; combinação de variâncias; união probabilística de
+  opacidade). Seis novos `EditorOp` de splat com undo/redo no `CommandStack`.
+- **UI de edição**: `SplatSelectOverlay` (arrasto de retângulo/laço sobre o
+  canvas, Esc cancela) e `SplatEditToolbar` (excluir, limpar, desfazer, decimar),
+  ligados por `SplatSelectionContext`.
+- **Métodos opcionais no contrato `SplatRenderer`**: `selectByRect`,
+  `selectByLasso`, `selectByRegion`, `deleteSplats`, `adjustAppearance`,
+  `cropToRegion`, `decimateSplats`, `getSplatData` — a UI degrada quando o
+  backend não implementa.
+- **Sincronização do servidor GPU**: commit `b5b0df9` traz 83 arquivos (+4304)
+  desenvolvidos em `vm.groupabz.com` — API de jobs, supervisor, `quality.py`,
+  `colmap_depth.py`, módulos `geom`/`relight`/`temporal`, `relight` e `temporal`
+  no viewer, scripts de deploy.
+
+### Corrigido
+
+- **`resolve_master_ply` escolhia o checkpoint errado**: ordenava os `.ply` por
+  texto, então `point_cloud_6999.ply` vinha depois de `point_cloud_29999.ply`
+  ("6" > "2") e o meshproxy usava um checkpoint antigo. Agora ordena pelo número
+  do step (`step_sort_key`).
+- **SfM não tentava matcher sequencial em ratio fraco**: em vídeo com pouca
+  paralaxe, o gate aprovava por `min_registered_count` mas o ratio ficava baixo
+  (ex.: 10/40) e o pipeline seguia com um modelo pobre. Novo degrau tenta
+  `sequential_matcher` quando o ratio está abaixo do alvo e há poses suficientes
+  — sem gastar tentativa extra em material inutilizável (reprovado por count).
+- `ruff` limpo: removidos imports sem uso e variáveis mortas, imports ordenados,
+  linhas longas quebradas.
+
+### Documentação
+
+- `docs/plan-editorsplat.md`: auditoria do Spark 2.1, causa raiz do smearing e
+  plano revisado em 6 componentes (corta o renderer WebGPU nativo e os parsers
+  de formato, que a lib já fornece).
+
+### Adicionado (trabalho do servidor)
 
 - **Contrato das 4 inspirações** no SceneIO (docs): SuperSplat 3, GaussianCrowds, Video2 4DGS e paredes-sem-LiDAR + depth no forward pass — uma tabela em `docs/unified-scene-io.md`. Briefings `docs/inspiration-video24dgs.md` e `docs/inspiration-walls-depth.md`. `temporal` já cobre timesteps de vídeo; `.npz`/Comfy e `dataset/depths/` ficam reservados. `ColmapDepthProvider` documentado como stub.
 - **SceneIO unificado**: um orquestrador (`detect_source_kind` → `ingest_scene` → `export_scene`) para PLY, GIF, vídeo e imagens — sem pipelines paralelos. Desenho em `docs/unified-scene-io.md`.
@@ -81,5 +138,6 @@ Primeira entrega usável do monorepo (UI + API + contratos de pipeline). **Não*
 - README com como rodar web (`5173`), API (`8000`) e avaliação porta `2222`.
 - `tasks.md` atualizado com a auditoria de UI/workflow.
 
+[0.3.0]: https://github.com/Caiolinooo/Gaussian_Splating_Caio/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Caiolinooo/Gaussian_Splating_Caio/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Caiolinooo/Gaussian_Splating_Caio/releases/tag/v0.1.0

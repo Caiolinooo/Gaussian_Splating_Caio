@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gs-api"
-version = "0.2.0"
+version = "0.3.0"
 description = "API local FastAPI — orquestra o Provisioner e (nas próximas fases) os jobs do pipeline de Gaussian Splatting"
 requires-python = ">=3.11"
 dependencies = [

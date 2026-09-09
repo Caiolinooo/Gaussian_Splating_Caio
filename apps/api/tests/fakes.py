@@ -140,6 +140,24 @@ class FakeJobMachine:
         self._emit(record, None, 0.0, "Cancelamento solicitado.")
         return record
 
+    def rebuild(self, job_id: str, from_stage: str = "sfm") -> FakeRecord:
+        record = self.get(job_id)
+        record.cancel_requested = False
+        record.error_code = None
+        record.error_message = None
+        record.state = from_stage
+        reset = False
+        for name, stage in record.stages.items():
+            if name == from_stage:
+                reset = True
+            if reset:
+                stage.status = "pending"
+                stage.progress = 0.0
+                stage.error_code = None
+                stage.error_message = None
+        record.updated_at = _utc()
+        return record
+
     def retry(self, job_id: str) -> FakeRecord:
         record = self.get(job_id)
         if record.state == "done":

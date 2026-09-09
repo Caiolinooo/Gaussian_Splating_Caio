@@ -12,8 +12,8 @@ from collections.abc import Callable
 from jobs.errors import InvalidTransition, JobCancelled, JobInterrupted
 from jobs.handlers import StageHandlers, StageOutcome, default_handlers
 from jobs.models import JobRecord, JobSpec, new_job_record, utcnow
-from jobs.quality import apply_quality_defaults
 from jobs.progress import ProgressEvent, ProgressSink, make_event
+from jobs.quality import apply_quality_defaults
 from jobs.states import (
     STAGE_ORDER,
     JobState,
