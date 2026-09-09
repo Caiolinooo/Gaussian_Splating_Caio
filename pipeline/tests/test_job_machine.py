@@ -232,6 +232,28 @@ def test_error_then_retry_from_failed_stage(tmp_path: Path) -> None:
     assert boom["n"] == 2
 
 
+def test_retry_resolves_system_python_and_resumes_training(tmp_path: Path, monkeypatch) -> None:
+    venv_py = "/home/caio/gaussian-splating/.venv/bin/python"
+    monkeypatch.setattr("jobs.machine.resolve_python_bin", lambda _configured: venv_py)
+    store = JsonJobStore(tmp_path / "store")
+    machine = JobMachine(store, handlers=_handlers())
+    record = machine.create(_spec(tmp_path, key=None))
+    record.tools.python = "/usr/bin/python3"
+    record.state = JobState.ERROR
+    record.last_completed_stage = "sfm"
+    record.stages["extracting"].status = StageStatus.DONE
+    record.stages["sfm"].status = StageStatus.DONE
+    record.stages["training"].status = StageStatus.FAILED
+    record.stages["training"].error_code = "TRAINER_FAILED"
+    store.save(record)
+
+    retried = machine.retry(record.job_id)
+    assert retried.tools.python == venv_py
+    assert retried.state is JobState.TRAINING
+    assert retried.stages["sfm"].status is StageStatus.DONE
+    assert retried.stages["training"].status is StageStatus.PENDING
+
+
 def test_cancel_queued_and_mid_run(tmp_path: Path) -> None:
     store = JsonJobStore(tmp_path / "store")
     machine = JobMachine(store, handlers=_handlers())

@@ -2,7 +2,7 @@
 
 import subprocess
 
-from provisioner.bins import resolve_colmap_bin
+from provisioner.bins import resolve_colmap_bin, resolve_python_bin
 from provisioner.detect import Status, detect_colmap
 from provisioner.health import CHECKERS, run_all_checks
 from provisioner.install import (
@@ -82,6 +82,46 @@ def test_install_colmap_uses_existing_binary(monkeypatch) -> None:
     result = install_colmap(logs.append)
     assert result.status is StepStatus.DONE
     assert "colmap" in result.message.lower()
+
+
+def _make_venv_python(root) -> object:
+    venv = root / ".venv"
+    bindir = venv / "bin"
+    bindir.mkdir(parents=True)
+    (venv / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
+    python = bindir / "python"
+    python.write_text("#!/bin/sh\n", encoding="utf-8")
+    python.chmod(0o755)
+    return python
+
+
+def test_resolve_python_prefers_venv_over_system(tmp_path, monkeypatch) -> None:
+    venv_python = _make_venv_python(tmp_path)
+    monkeypatch.setattr("provisioner.bins._discover_venv_python", lambda: str(venv_python))
+    assert resolve_python_bin("python") == str(venv_python)
+    assert resolve_python_bin("python3") == str(venv_python)
+    assert resolve_python_bin("/usr/bin/python3") == str(venv_python)
+
+
+def test_resolve_python_keeps_explicit_venv(tmp_path, monkeypatch) -> None:
+    venv_python = _make_venv_python(tmp_path)
+    monkeypatch.setattr("provisioner.bins._discover_venv_python", lambda: "/other/.venv/bin/python")
+    assert resolve_python_bin(str(venv_python)) == str(venv_python)
+
+
+def test_resolve_python_honors_tool_python_env(tmp_path, monkeypatch) -> None:
+    venv_python = _make_venv_python(tmp_path)
+    monkeypatch.setenv("TOOL_PYTHON", str(venv_python))
+    monkeypatch.setattr("provisioner.bins._discover_venv_python", lambda: None)
+    assert resolve_python_bin("/usr/bin/python3") == str(venv_python)
+
+
+def test_resolve_python_system_only_without_venv(monkeypatch) -> None:
+    monkeypatch.delenv("TOOL_PYTHON", raising=False)
+    monkeypatch.setattr("provisioner.bins._discover_venv_python", lambda: None)
+    monkeypatch.setattr("provisioner.bins.shutil.which", lambda name: "/usr/bin/python3" if name else None)
+    resolved = resolve_python_bin("python3")
+    assert resolved == "/usr/bin/python3"
 
 
 def test_resolve_colmap_prefers_existing_path(tmp_path, monkeypatch) -> None:
