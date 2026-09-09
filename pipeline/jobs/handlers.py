@@ -214,12 +214,16 @@ def handle_training(record: JobRecord, progress: Callable[[float, str], None], r
         result_dir=paths.train_dir,
         runner=runner,
         progress=progress,
+        extra_log_dir=paths.logs_dir,
     )
     artifacts = {"result_dir": str(result.result_dir)}
     if result.ply_path is not None:
         artifacts["ply"] = str(result.ply_path)
     if result.ckpt_path is not None:
         artifacts["ckpt"] = str(result.ckpt_path)
+    log_path = paths.train_dir / "train.log"
+    if log_path.is_file():
+        artifacts["train_log"] = str(log_path)
     return StageOutcome(
         artifacts=artifacts,
         metrics={
@@ -227,6 +231,7 @@ def handle_training(record: JobRecord, progress: Callable[[float, str], None], r
             "num_gaussians": result.metrics.num_gaussians,
             "duration_s": result.metrics.duration_s,
             "ssim_val": result.metrics.ssim_val,
+            "python_bin": python_bin,
         },
         message="Treino 3DGS concluído.",
     )

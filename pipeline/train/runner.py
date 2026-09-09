@@ -67,6 +67,32 @@ def ensure_data_factor_images(data_dir: Path, factor: int) -> Path | None:
     return dest
 
 
+def persist_trainer_log(
+    result_dir: Path,
+    *,
+    argv: Sequence[str],
+    returncode: int,
+    stdout: str,
+    stderr: str,
+    extra_log_dir: Path | None = None,
+) -> str:
+    """Write stdout/stderr even when the trainer exits non-zero (tyro/CUDA)."""
+    result_dir.mkdir(parents=True, exist_ok=True)
+    text = (
+        f"argv: {' '.join(argv)}\n"
+        f"returncode: {returncode}\n"
+        f"--- stdout ---\n{stdout}\n"
+        f"--- stderr ---\n{stderr}\n"
+    )
+    dest = result_dir / "train.log"
+    dest.write_text(text, encoding="utf-8")
+    if extra_log_dir is not None:
+        extra_log_dir.mkdir(parents=True, exist_ok=True)
+        (extra_log_dir / "train.log").write_text(text, encoding="utf-8")
+    LOGGER.info("event=train_log path=%s returncode=%s", dest, returncode)
+    return f"{stdout}\n{stderr}"
+
+
 def run_training(
     config: TrainConfig,
     *,
@@ -75,6 +101,7 @@ def run_training(
     runner: CommandRunner,
     progress: ProgressFn | None = None,
     ckpt: Path | None = None,
+    extra_log_dir: Path | None = None,
 ) -> TrainResult:
     if not data_dir.exists():
         raise missing_dataset(str(data_dir))
@@ -92,7 +119,14 @@ def run_training(
     started = time.monotonic()
     executed = runner.run(argv, timeout_s=config.timeout_s)
     duration = time.monotonic() - started
-    log_text = f"{executed.stdout}\n{executed.stderr}"
+    log_text = persist_trainer_log(
+        result_dir,
+        argv=argv,
+        returncode=executed.returncode,
+        stdout=executed.stdout,
+        stderr=executed.stderr,
+        extra_log_dir=extra_log_dir,
+    )
     if executed.returncode != 0:
         raise trainer_failed(executed.stderr.strip() or executed.stdout.strip() or "nonzero")
 

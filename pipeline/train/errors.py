@@ -10,12 +10,23 @@ class TrainError(Exception):
         self.code = code
 
 
+def _trainer_hint(detail: str) -> str:
+    low = detail.lower()
+    if "tyro" in low or "viser" in low:
+        return " O interpretador do treino não carregou o .venv (tyro/viser)."
+    if "cuda" in low or "nvidia" in low:
+        return " Erro CUDA — verifique o driver e o PyTorch do .venv."
+    return ""
+
+
 def trainer_failed(detail: str) -> TrainError:
+    hint = _trainer_hint(detail)
     return TrainError(
         detail,
         user_message=(
             "O treino 3DGS falhou. "
             "Confira se o ambiente GPU está saudável e tente novamente."
+            + hint
         ),
         code="TRAINER_FAILED",
     )
