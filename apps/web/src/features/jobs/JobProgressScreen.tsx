@@ -184,6 +184,8 @@ export function JobProgressScreen({ jobId, onOpenScene, onBack }: JobProgressScr
           <p className="muted">
             Job {jobId}
             {job ? ` · ${jobStateLabel(job.state)}` : ''}
+            {' · '}
+            caminho rápido L4: ingestão + SfM + ~3500 passos (cerca de 15–25 min)
           </p>
           <p className={connection === 'live' ? 'jobs-connection is-live' : 'jobs-connection'}>
             {connectionLabel(connection, job?.state)}

@@ -12,7 +12,7 @@ App de avaliação: **http://vm.groupabz.com:2222** (UI+API, `DEV_AUTH_BYPASS`).
 
 - Monorepo pnpm com `apps/web`, `apps/api`, `apps/desktop`, `packages/{units,viewer,overlays}`, `pipeline/`, `installer/`, `docs/`.
 - **Provisioner** (`pipeline/provisioner`): detecção real + instalação de FFmpeg/PyTorch+CUDA/gsplat no Linux com GPU. **COLMAP não é compilado nem instalado via apt** — o app localiza o binário do usuário (`which colmap` ou `~/colmap/build/src/colmap/exe/colmap`).
-- **Defaults L4 24GB / 50GB RAM**: ingestão 150–400 frames, `sequential_matcher` em vídeo (e em >80 imagens), treino `data_factor=4`, SH 2, 7000 steps (~20GB VRAM).
+- **Defaults L4 24GB / 50GB RAM**: ingestão 150–180 frames (1280px), `sequential_matcher` em vídeo (e em >80 imagens), mapper com 1 modelo, treino `data_factor=4`, SH 2, **3500 steps** (~15–25 min no caminho rápido). `TRAIN_MAX_STEPS` sobe a qualidade.
 - **Pipeline** (código + testes unitários): ingestão vídeo/imagens, comandos SfM/treino/export, job machine retomável (`extracting→sfm→training→exporting→meshproxy→autocal`), auto-calibração por altura com fallback se pose/depth faltar, meshproxy SKIPPED sem Open3D.
 - **API local** (FastAPI): Setup + jobs (upload, progresso WS, artefatos, `DELETE /jobs/{id}`), cenas, JWT Supabase (HS256) com isolamento por usuário. WS aceita `?token=` e `?access_token=`.
 - **UI web**: Setup em `/setup`; auth `/login|/signup|/reset`; jobs `/jobs|/upload|/jobs/:id`; viewer/edição/calibração/overlays atrás de `AuthGuard`. Home `/` → `/jobs`.

@@ -22,7 +22,7 @@ class ColmapConfig:
     camera_model: CameraModel = "SIMPLE_RADIAL"
     single_camera: bool = True
     use_gpu: bool = True
-    sequential_overlap: int = 15
+    sequential_overlap: int = 12
     sequential_quadratic_overlap: bool = True
     min_registered_ratio: float = 0.70
     min_registered_count: int = 20

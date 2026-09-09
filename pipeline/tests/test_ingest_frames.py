@@ -35,13 +35,22 @@ def _checker(width: int = 16, height: int = 16) -> list[list[float]]:
     return [[float((x + y) % 2) * 255.0 for x in range(width)] for y in range(height)]
 
 
-def test_adaptive_rate_short_clip_extracts_all() -> None:
-    rate = compute_adaptive_rate(10.0, 30.0, target_min=150, target_max=400)
+def test_adaptive_rate_at_target_min_extracts_all() -> None:
+    rate = compute_adaptive_rate(5.0, 30.0, target_min=150, target_max=180)
     assert rate.strategy == "all"
-    assert rate.source_frame_count == 300
-    assert rate.expected_extract_count == 300
-    assert rate.target_keep_count == 300
+    assert rate.source_frame_count == 150
+    assert rate.expected_extract_count == 150
+    assert rate.target_keep_count == 150
     assert rate.warning is None
+
+
+def test_adaptive_rate_dense_short_clip_caps_at_target_max() -> None:
+    """10s @ 30fps = 300 frames — não extrair tudo (job 0284bca6)."""
+    rate = compute_adaptive_rate(10.0, 30.0, target_min=150, target_max=180, oversample=1.15)
+    assert rate.strategy == "downsample"
+    assert rate.source_frame_count == 300
+    assert rate.target_keep_count == 180
+    assert rate.expected_extract_count == int(round(180 * 1.15))
 
 
 def test_adaptive_rate_long_clip_downsamples_toward_400() -> None:

@@ -82,10 +82,10 @@ class PipelineMachineAdapter:
                 python_bin=tool_kwargs.get("python", "python"),
                 trainer_script=Path(tool_kwargs.get("simple_trainer", "simple_trainer.py")),
                 data_factor=int(getattr(train, "data_factor", 4)),
-                max_steps=int(getattr(train, "max_steps", 7000)),
-                save_steps=tuple(getattr(train, "save_steps", (7000,))),
-                eval_steps=tuple(getattr(train, "eval_steps", (7000,))),
-                ply_steps=tuple(getattr(train, "ply_steps", (7000,))),
+                max_steps=int(getattr(train, "max_steps", 3500)),
+                save_steps=tuple(getattr(train, "save_steps", (3500,))),
+                eval_steps=tuple(getattr(train, "eval_steps", (3500,))),
+                ply_steps=tuple(getattr(train, "ply_steps", (3500,))),
                 extra_args=tuple(getattr(train, "extra_args", ())),
             )
         colmap = getattr(spec, "colmap", None)

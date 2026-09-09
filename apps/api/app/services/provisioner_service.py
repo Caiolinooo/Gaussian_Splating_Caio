@@ -8,6 +8,7 @@ separada (as detecções chamam subprocessos bloqueantes como ``nvidia-smi`` e
 from __future__ import annotations
 
 import threading
+import time
 import traceback
 from collections import deque
 from datetime import UTC, datetime
@@ -17,7 +18,11 @@ from provisioner.health import HealthReport, run_all_checks
 from provisioner.install import PROVISIONING_PLAN, StepStatus, run_provisioning
 
 MAX_LOG_LINES = 500
+HEALTH_TTL_S = 20.0
 _TERMINAL_STEP_STATUSES = {StepStatus.DONE.value, StepStatus.SKIPPED.value, StepStatus.ERROR.value}
+_health_lock = threading.Lock()
+_health_cached_at = 0.0
+_health_cached: HealthReport | None = None
 
 
 class SetupAlreadyRunningError(RuntimeError):
@@ -65,11 +70,13 @@ class SetupSession:
                 self._log_locked("Falha inesperada durante o provisionamento:")
                 for line in traceback.format_exc().splitlines():
                     self._log_locked(line)
+            invalidate_health_cache()
         else:
             with self._lock:
                 self.state = "done"
                 self._log_locked("Provisionamento finalizado.")
                 self.updated_at = _utc_now()
+            invalidate_health_cache()
 
     def _log(self, line: str) -> None:
         with self._lock:
@@ -103,13 +110,31 @@ class SetupSession:
 session = SetupSession()
 
 
+def invalidate_health_cache() -> None:
+    """Força nova sondagem após install ou quando o cache ficou velho."""
+    global _health_cached_at, _health_cached
+    with _health_lock:
+        _health_cached_at = 0.0
+        _health_cached = None
+
+
 def get_health() -> HealthReport:
-    """Roda as pré-checagens do ambiente (bloqueante — FastAPI executa em threadpool)."""
-    return run_all_checks()
+    """Pré-checagens com cache curto — `colmap -h` + import torch somam ~5s no L4."""
+    global _health_cached_at, _health_cached
+    now = time.monotonic()
+    with _health_lock:
+        if _health_cached is not None and now - _health_cached_at < HEALTH_TTL_S:
+            return _health_cached
+    report = run_all_checks()
+    with _health_lock:
+        _health_cached = report
+        _health_cached_at = time.monotonic()
+    return report
 
 
 def start_install() -> None:
     """Dispara o provisionamento assíncrono (202 na API)."""
+    invalidate_health_cache()
     session.start()
 
 

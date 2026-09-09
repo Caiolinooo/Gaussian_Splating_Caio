@@ -2,7 +2,7 @@
  * Cliente HTTP do viewer 3D (artefatos de job + JSON de cena versionado).
  *
  * ## Base URL
- * `import.meta.env.VITE_API_URL` — se ausente, usa `http://localhost:8000`.
+ * Mesma regra de `getApiBaseUrl`: Vite :5173 → localhost:8000; build na API → origem.
  *
  * ## Endpoints (contrato assumido até a API real estabilizar)
  *
@@ -31,20 +31,11 @@
 import type { OverlayDocument } from '@gs/overlays';
 import { parseSceneDocument, type CalibrationJson, type SceneDocument } from '@gs/viewer';
 
+import { getApiBaseUrl } from './api';
 import { getAccessToken, isDevAuthBypass } from './supabase';
 
-const DEFAULT_API_URL = 'http://localhost:8000';
-
 export function getViewerApiBaseUrl(): string {
-  const fromEnv = import.meta.env.VITE_API_URL;
-  if (typeof fromEnv === 'string' && fromEnv.trim().length > 0) {
-    return fromEnv.replace(/\/+$/, '');
-  }
-  // Mesmo fallback same-origin de getApiBaseUrl (build servido pela API).
-  if (typeof window !== 'undefined' && window.location?.origin && window.location.port !== '5173') {
-    return window.location.origin;
-  }
-  return DEFAULT_API_URL;
+  return getApiBaseUrl();
 }
 
 /** Metadados de auto-calibração que o schema do SceneManager ainda não tipa. */

@@ -40,6 +40,24 @@ def test_setup_status_shape() -> None:
     assert isinstance(body["ready"], bool)
 
 
+def test_setup_status_is_cached(monkeypatch) -> None:
+    from app.services import provisioner_service
+
+    provisioner_service.invalidate_health_cache()
+    calls = {"n": 0}
+    original = provisioner_service.run_all_checks
+
+    def wrapped():
+        calls["n"] += 1
+        return original()
+
+    monkeypatch.setattr(provisioner_service, "run_all_checks", wrapped)
+    assert client.get("/setup/status").status_code == 200
+    assert client.get("/setup/status").status_code == 200
+    assert calls["n"] == 1
+    provisioner_service.invalidate_health_cache()
+
+
 def test_install_flow_and_progress() -> None:
     response = client.post("/setup/install")
     assert response.status_code == 202

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import platform
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final
@@ -62,7 +63,8 @@ def run_all_checks() -> HealthReport:
     - ``overall``: pior estado agregado (error > missing > warning > unknown > ok),
       com componentes críticos elevando ``missing`` a ``error`` no consolidado.
     """
-    checks = [checker() for checker in CHECKERS]
+    with ThreadPoolExecutor(max_workers=len(CHECKERS)) as pool:
+        checks = list(pool.map(lambda checker: checker(), CHECKERS))
 
     critical_failed = any(
         check.key in CRITICAL_KEYS and check.status in (Status.ERROR, Status.MISSING) for check in checks

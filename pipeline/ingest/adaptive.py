@@ -1,4 +1,4 @@
-"""Adaptive frame-rate selection targeting 150–400 frames."""
+"""Adaptive frame-rate selection targeting 150–180 frames (cap, not “extract all”)."""
 
 from __future__ import annotations
 
@@ -71,25 +71,18 @@ def compute_adaptive_rate(
                 "conjunto maior de imagens."
             ),
         )
-    if source_count <= target_max:
-        return AdaptiveRate(
-            source_fps=source_fps,
-            duration_s=duration_s,
-            source_frame_count=source_count,
-            extract_fps=source_fps,
-            expected_extract_count=source_count,
-            target_keep_count=source_count,
-            strategy="all",
-        )
 
+    # Sempre capar em target_max — um clipe de 10s a 30 fps (300 frames)
+    # não deve extrair tudo só porque ainda cabe no teto antigo de 400.
     extract_count = min(source_count, int(round(target_max * oversample)))
     extract_fps = extract_count / duration_s
+    strategy: Strategy = "all" if extract_count == source_count else "downsample"
     return AdaptiveRate(
         source_fps=source_fps,
         duration_s=duration_s,
         source_frame_count=source_count,
         extract_fps=extract_fps,
         expected_extract_count=extract_count,
-        target_keep_count=target_max,
-        strategy="downsample",
+        target_keep_count=min(extract_count, target_max),
+        strategy=strategy,
     )

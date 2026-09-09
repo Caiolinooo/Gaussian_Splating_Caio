@@ -1,6 +1,5 @@
+import { apiConnectionErrorMessage, getApiBaseUrl } from '../lib/api';
 import type { ApiHealth, HealthReport, InstallAccepted, SetupProgress } from './types';
-
-const API_BASE_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
 /** Erro de comunicação com a API local, com mensagem pronta para a UI (pt-BR). */
 export class ApiError extends Error {
@@ -16,14 +15,12 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${getApiBaseUrl()}${path}`, {
       headers: { Accept: 'application/json' },
       ...init,
     });
   } catch {
-    throw new ApiError(
-      'Não foi possível conectar à API local. Verifique se o backend está em execução (uvicorn na porta 8000).',
-    );
+    throw new ApiError(apiConnectionErrorMessage(getApiBaseUrl()));
   }
 
   if (!response.ok) {

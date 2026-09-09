@@ -5,6 +5,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Caminho rápido de avaliação L4: splat usável sem 7k steps.
+EVAL_MIN_STEPS = 3_000
+EVAL_DEFAULT_STEPS = 3_500
+EVAL_MAX_STEPS = 4_000
+
+
+def resolve_eval_train_steps(frame_count: int, configured_steps: int = EVAL_DEFAULT_STEPS) -> int:
+    """Adapta só o default de avaliação. ``TRAIN_MAX_STEPS`` explícito (≠ 3500) fica."""
+    if configured_steps != EVAL_DEFAULT_STEPS:
+        return configured_steps
+    if frame_count < 80:
+        return EVAL_MIN_STEPS
+    if frame_count > 220:
+        return EVAL_MAX_STEPS
+    return EVAL_DEFAULT_STEPS
+
 
 @dataclass(frozen=True)
 class TrainConfig:
@@ -14,10 +30,10 @@ class TrainConfig:
     trainer_script: Path = Path("simple_trainer.py")
     subcommand: str = "default"
     data_factor: int = 4
-    max_steps: int = 7_000
-    save_steps: tuple[int, ...] = (7_000,)
-    eval_steps: tuple[int, ...] = (7_000,)
-    ply_steps: tuple[int, ...] = (7_000,)
+    max_steps: int = EVAL_DEFAULT_STEPS
+    save_steps: tuple[int, ...] = (EVAL_DEFAULT_STEPS,)
+    eval_steps: tuple[int, ...] = (EVAL_DEFAULT_STEPS,)
+    ply_steps: tuple[int, ...] = (EVAL_DEFAULT_STEPS,)
     save_ply: bool = True
     disable_viewer: bool = True
     disable_video: bool = True

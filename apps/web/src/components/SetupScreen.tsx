@@ -48,8 +48,8 @@ export function SetupScreen() {
         <header className="setup-header">
           <h1>Configuração do ambiente</h1>
           <p>
-            O Provisioner verifica e prepara automaticamente tudo o que o pipeline de Gaussian
-            Splatting precisa — você não precisa executar nenhum comando manualmente.
+            O Provisioner fala com a API neste mesmo endereço (não é a porta 8000 do seu
+            computador). No servidor L4, um walkthrough típico leva cerca de 15–25 minutos.
           </p>
         </header>
 

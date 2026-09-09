@@ -150,7 +150,7 @@ class Settings(BaseSettings):
     tool_python: str = "python"
     tool_simple_trainer: str = "simple_trainer.py"
     tool_splat_transform: str = "splat-transform"
-    train_max_steps: int = 7000
+    train_max_steps: int = 3500
     train_data_factor: int = 4
     train_sh_degree: int = 2
     colmap_min_registered_count: int = 20

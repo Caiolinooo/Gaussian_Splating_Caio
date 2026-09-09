@@ -35,6 +35,60 @@ const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 400;
 
+export interface ResolveApiBaseUrlInput {
+  envUrl?: string | null;
+  origin?: string;
+  port?: string;
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+/** URL bakeada de dev (`localhost:8000`) — ignorada quando a UI não está no Vite. */
+export function isLoopbackApiUrl(url: string): boolean {
+  try {
+    return isLoopbackHostname(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve a base da API.
+ * No Vite (:5173) usa `VITE_API_URL` ou localhost:8000.
+ * Fora disso, um localhost bakeado (ou vazio) cai na origem da página —
+ * o build servido em :2222 não pode chamar a porta 8000 da máquina do usuário.
+ */
+export function resolveApiBaseUrl(input: ResolveApiBaseUrlInput): string {
+  const fromEnv = typeof input.envUrl === 'string' ? input.envUrl.trim().replace(/\/+$/, '') : '';
+  const origin = input.origin?.replace(/\/+$/, '') ?? '';
+  const viteDev = input.port === '5173';
+  if (viteDev) {
+    return fromEnv || DEFAULT_API_URL;
+  }
+  if (origin) {
+    if (!fromEnv || isLoopbackApiUrl(fromEnv)) {
+      return origin;
+    }
+    return fromEnv;
+  }
+  return fromEnv || DEFAULT_API_URL;
+}
+
+export function apiConnectionErrorMessage(baseUrl: string): string {
+  let portHint = '';
+  try {
+    const port = new URL(baseUrl).port;
+    if (port) {
+      portHint = ` (porta ${port})`;
+    }
+  } catch {
+    portHint = '';
+  }
+  return `Não foi possível conectar à API em ${baseUrl}. Verifique se o backend está em execução${portHint}.`;
+}
+
 export type JobState =
   | 'queued'
   | 'extracting'
@@ -115,15 +169,15 @@ export class ApiError extends Error {
 
 export function getApiBaseUrl(): string {
   const raw = import.meta.env.VITE_API_URL;
-  if (typeof raw === 'string' && raw.trim().length > 0) {
-    return raw.replace(/\/+$/, '');
+  const envUrl = typeof raw === 'string' ? raw : '';
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return resolveApiBaseUrl({
+      envUrl,
+      origin: window.location.origin,
+      port: window.location.port,
+    });
   }
-  // Build servido pela própria API (SERVE_WEB_DIR): mesmo host/porta da página.
-  // Fora do dev server do Vite (5173), relativo à origem é o caminho certo.
-  if (typeof window !== 'undefined' && window.location?.origin && window.location.port !== '5173') {
-    return window.location.origin;
-  }
-  return DEFAULT_API_URL;
+  return resolveApiBaseUrl({ envUrl });
 }
 
 export function isRetryableStatus(status: number): boolean {
@@ -242,15 +296,13 @@ export async function request<T>(
       if (error instanceof ApiError) {
         throw error;
       }
-      throw new ApiError(
-        'Não foi possível conectar à API. Verifique se o backend está em execução.',
-      );
+      throw new ApiError(apiConnectionErrorMessage(getApiBaseUrl()));
     }
   }
   if (lastError instanceof ApiError) {
     throw lastError;
   }
-  throw new ApiError('Não foi possível conectar à API. Verifique se o backend está em execução.');
+  throw new ApiError(apiConnectionErrorMessage(getApiBaseUrl()));
 }
 
 export interface CreateJobInput {

@@ -18,8 +18,8 @@ class VideoIngestConfig:
     """Adaptive frame extraction + quality filters."""
 
     target_min_frames: int = 150
-    target_max_frames: int = 400
-    oversample: float = 1.25
+    target_max_frames: int = 180
+    oversample: float = 1.15
     blur_threshold: float = 80.0
     relaxed_blur_threshold: float = 40.0
     # 8×8 mean signatures move slowly on a room walk; 4.0 treated every
@@ -27,7 +27,7 @@ class VideoIngestConfig:
     dedup_threshold: float = 1.0
     relaxed_dedup_threshold: float = 0.5
     min_keep_frames: int = 8
-    max_edge_px: int = 1600
+    max_edge_px: int = 1280
     jpeg_quality: int = 2
     min_width: int = 640
     min_height: int = 480
@@ -52,7 +52,7 @@ class ImageIngestConfig:
 
     min_width: int = 640
     min_height: int = 480
-    max_edge_px: int = 1600
+    max_edge_px: int = 1280
     allowed_suffixes: frozenset[str] = field(default_factory=lambda: SUPPORTED_IMAGE_SUFFIXES)
     normalize_resolution: bool = True
 
