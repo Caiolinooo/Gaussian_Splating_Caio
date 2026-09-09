@@ -31,7 +31,7 @@ except ImportError:  # optional stage — package or Open3D extras may be absent
     meshproxy_stage = None
 from sfm.runner import run_sfm
 from train.commands import latest_ply
-from train.config import TrainConfig
+from train.config import TrainConfig, resolve_eval_train_steps
 from train.runner import run_training
 
 
@@ -181,15 +181,24 @@ def handle_training(record: JobRecord, progress: Callable[[float, str], None], r
             skipped=True,
         )
     paths = job_paths(record.work_path)
+    extract = record.stages.get("extracting")
+    kept_frames = 0
+    if extract is not None and extract.metrics.get("kept_frames") is not None:
+        kept_frames = int(extract.metrics["kept_frames"])
+    configured_steps = record.train.max_steps
+    steps = resolve_eval_train_steps(kept_frames, configured_steps)
+    save_steps = (steps,) if steps != configured_steps else record.train.save_steps
+    eval_steps = (steps,) if steps != configured_steps else record.train.eval_steps
+    ply_steps = (steps,) if steps != configured_steps else record.train.ply_steps
     train_cfg = TrainConfig(
         python_bin=record.tools.python,
         trainer_script=Path(record.tools.simple_trainer),
         subcommand=record.train.subcommand,
         data_factor=record.train.data_factor,
-        max_steps=record.train.max_steps,
-        save_steps=record.train.save_steps,
-        eval_steps=record.train.eval_steps,
-        ply_steps=record.train.ply_steps,
+        max_steps=steps,
+        save_steps=save_steps,
+        eval_steps=eval_steps,
+        ply_steps=ply_steps,
         save_ply=record.train.save_ply,
         disable_viewer=record.train.disable_viewer,
         disable_video=record.train.disable_video,
