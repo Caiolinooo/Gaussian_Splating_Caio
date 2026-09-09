@@ -40,7 +40,7 @@ caminho suportado.
 | `MAX_UPLOAD_MB`                                                                                                 | `2048`              | Teto de upload (vídeo ou soma das imagens)                             |
 | `MAX_VIDEO_DURATION_S`                                                                                          | `1200`              | Duração máxima (só se `ffprobe` estiver disponível)                    |
 | `MIN_IMAGES`                                                                                                    | `20`                | Mínimo de imagens no modo `files[]`                                    |
-| `TOOL_FFMPEG` / `TOOL_FFPROBE` / `TOOL_COLMAP` / `TOOL_PYTHON` / `TOOL_SIMPLE_TRAINER` / `TOOL_SPLAT_TRANSFORM` | nomes dos binários  | Preenchidos em `ToolPaths` na criação do job                           |
+| `TOOL_FFMPEG` / `TOOL_FFPROBE` / `TOOL_COLMAP` / `TOOL_PYTHON` / `TOOL_SIMPLE_TRAINER` / `TOOL_SPLAT_TRANSFORM` | nomes dos binários  | `TOOL_PYTHON` deve ser o `.venv/bin/python` (nunca `/usr/bin/python3` se o venv existir); preenchidos em `ToolPaths` na criação do job |
 
 Auth de desenvolvimento (sem projeto Supabase):
 

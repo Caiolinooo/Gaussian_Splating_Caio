@@ -166,6 +166,8 @@ def tool_paths_from_settings(settings: Settings) -> Any:
     )
 
     colmap = resolve_colmap_bin(settings.tool_colmap) or settings.tool_colmap
+    # Never persist /usr/bin/python3 when a project .venv exists — the venv
+    # binary is often a symlink to system Python and only the venv path loads tyro/gsplat.
     return SimpleNamespace(
         ffmpeg=resolve_ffmpeg_bin(settings.tool_ffmpeg),
         ffprobe=resolve_ffprobe_bin(settings.tool_ffprobe),

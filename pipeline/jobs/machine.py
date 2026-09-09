@@ -22,6 +22,7 @@ from jobs.states import (
     stage_to_state,
 )
 from jobs.store import JobStore
+from provisioner.bins import resolve_python_bin
 from sfm.errors import COLMAP_MISSING_USER
 
 LOGGER = logging.getLogger("pipeline.jobs")
@@ -135,6 +136,7 @@ class JobMachine:
         record.cancel_requested = False
         record.error_code = None
         record.error_message = None
+        record.tools.python = resolve_python_bin(record.tools.python)
         target = resume_stage(record) or STAGE_ORDER[0]
         stage = record.stages[target]
         if stage.status is StageStatus.FAILED or stage.status is StageStatus.RUNNING:

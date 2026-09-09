@@ -17,6 +17,7 @@ from jobs.models import JobRecord
 from jobs.paths import JobPaths, job_paths
 from jobs.runner import CommandRunner, SubprocessRunner
 from jobs.states import SourceKind
+from provisioner.bins import resolve_python_bin
 from sceneio.detect import skips_reconstruction
 from sceneio.export import export_scene, refresh_scene_calibration
 from sceneio.ingest import ingest_scene
@@ -190,8 +191,10 @@ def handle_training(record: JobRecord, progress: Callable[[float, str], None], r
     save_steps = (steps,) if steps != configured_steps else record.train.save_steps
     eval_steps = (steps,) if steps != configured_steps else record.train.eval_steps
     ply_steps = (steps,) if steps != configured_steps else record.train.ply_steps
+    python_bin = resolve_python_bin(record.tools.python)
+    record.tools.python = python_bin
     train_cfg = TrainConfig(
-        python_bin=record.tools.python,
+        python_bin=python_bin,
         trainer_script=Path(record.tools.simple_trainer),
         subcommand=record.train.subcommand,
         data_factor=record.train.data_factor,
