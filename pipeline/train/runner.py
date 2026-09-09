@@ -46,6 +46,27 @@ class TrainResult:
     log_text: str
 
 
+def ensure_data_factor_images(data_dir: Path, factor: int) -> Path | None:
+    """gsplat Parser exige ``images_{factor}`` quando ``factor > 1``.
+
+    O dataset do job só tem ``images/`` (frames do ingest). Sem a pasta
+    sufixada o trainer cai imediatamente. Um symlink para ``images`` deixa o
+    examples/datasets/colmap.py criar ``images_{factor}_png`` (JPEG) ou
+    reutilizar os frames.
+    """
+    if factor <= 1:
+        return None
+    images = data_dir / "images"
+    dest = data_dir / f"images_{factor}"
+    if dest.exists() or dest.is_symlink():
+        return dest
+    if not images.exists():
+        return None
+    dest.symlink_to(images, target_is_directory=True)
+    LOGGER.info("event=train_images_factor src=%s dest=%s", images, dest)
+    return dest
+
+
 def run_training(
     config: TrainConfig,
     *,
@@ -57,6 +78,7 @@ def run_training(
 ) -> TrainResult:
     if not data_dir.exists():
         raise missing_dataset(str(data_dir))
+    ensure_data_factor_images(data_dir, config.data_factor)
     result_dir.mkdir(parents=True, exist_ok=True)
     argv = build_simple_trainer_command(
         config,
