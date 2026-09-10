@@ -64,6 +64,11 @@ limpeza de floaters (C1). Sincronização do trabalho desenvolvido no servidor G
 
 ### Corrigido
 
+- **Treino 3DGS falhava com `returncode 2`**: o `extra_args` emitia
+  `--normalize_world_space False`, mas o tyro do `simple_trainer.py` só aceita a
+  forma de flag booleana — valor solto virava "Unrecognized options". Agora emite
+  `--no-normalize-world-space` (`job_runtime.py` nos dois pontos e default do
+  `TrainConfig`); `trainer_normalizes_world` reconhece as formas `--no-` e a de valor.
 - **`resolve_master_ply` escolhia o checkpoint errado**: ordenava os `.ply` por
   texto, então `point_cloud_6999.ply` vinha depois de `point_cloud_29999.ply`
   ("6" > "2") e o meshproxy usava um checkpoint antigo. Agora ordena pelo número
