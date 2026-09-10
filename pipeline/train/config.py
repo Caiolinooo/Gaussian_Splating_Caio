@@ -23,6 +23,37 @@ def resolve_eval_train_steps(frame_count: int, configured_steps: int = QUALITY_D
     return QUALITY_DEFAULT_STEPS
 
 
+_TRUE_VALUES = {"true", "1", "yes"}
+_FALSE_VALUES = {"false", "0", "no"}
+_NORMALIZE_FLAGS = {"--normalize_world_space", "--normalize-world-space"}
+
+
+def canonicalize_extra_args(extra_args: tuple[str, ...]) -> tuple[str, ...]:
+    """Reescreve o formato legado ``--normalize_world_space <valor>`` na forma de
+    flag que o tyro aceita — registros de jobs criados antes da correção guardam
+    o formato antigo e o retry repete o argv persistido."""
+    args = [str(arg) for arg in extra_args]
+    out: list[str] = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in _NORMALIZE_FLAGS:
+            value = args[index + 1].lower() if index + 1 < len(args) and not args[index + 1].startswith("-") else ""
+            if value in _FALSE_VALUES:
+                out.append("--no-normalize-world-space")
+                index += 2
+                continue
+            if value in _TRUE_VALUES:
+                index += 2
+                continue
+            out.append(arg)
+            index += 1
+            continue
+        index += 1
+        out.append(arg)
+    return tuple(out)
+
+
 @dataclass(frozen=True)
 class TrainConfig:
     """Mirrors the public flags of nerfstudio-project/gsplat ``simple_trainer.py``."""
@@ -58,3 +89,4 @@ class TrainConfig:
             raise ValueError("max_steps must be >= 1")
         if self.subcommand not in {"default", "mcmc"}:
             raise ValueError("subcommand must be 'default' or 'mcmc'")
+        object.__setattr__(self, "extra_args", canonicalize_extra_args(self.extra_args))

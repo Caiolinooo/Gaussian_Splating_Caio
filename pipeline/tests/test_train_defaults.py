@@ -2,7 +2,12 @@
 
 from pathlib import Path
 
-from train.config import QUALITY_DEFAULT_STEPS, TrainConfig, resolve_eval_train_steps
+from train.config import (
+    QUALITY_DEFAULT_STEPS,
+    TrainConfig,
+    canonicalize_extra_args,
+    resolve_eval_train_steps,
+)
 from train.errors import trainer_failed
 from train.runner import ensure_data_factor_images, persist_trainer_log
 
@@ -23,6 +28,23 @@ def test_resolve_eval_train_steps_adapts_only_default() -> None:
     assert resolve_eval_train_steps(400, 30_000) == 30_000
     assert resolve_eval_train_steps(40, 7000) == 7000
     assert resolve_eval_train_steps(400, 12_000) == 12_000
+
+
+def test_canonicalize_extra_args_rewrites_legacy_normalize_value() -> None:
+    legacy = ("--sh_degree", "3", "--normalize_world_space", "False")
+    assert "--no-normalize-world-space" in canonicalize_extra_args(legacy)
+    assert "False" not in canonicalize_extra_args(legacy)
+    assert canonicalize_extra_args(("--normalize_world_space", "True")) == ()
+    assert canonicalize_extra_args(("--no-normalize-world-space",)) == ("--no-normalize-world-space",)
+    assert canonicalize_extra_args(("--normalize_world_space", "--sh_degree")) == (
+        "--normalize_world_space",
+        "--sh_degree",
+    )
+
+
+def test_train_config_canonicalizes_persisted_legacy_args() -> None:
+    cfg = TrainConfig(extra_args=("--sh_degree", "3", "--normalize_world_space", "False"))
+    assert cfg.extra_args == ("--sh_degree", "3", "--no-normalize-world-space")
 
 
 def test_ensure_data_factor_images_symlinks_when_missing(tmp_path: Path) -> None:
