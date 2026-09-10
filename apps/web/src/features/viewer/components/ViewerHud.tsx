@@ -16,6 +16,7 @@ export function ViewerHud() {
   const memoryMb = useViewerStore((state) => state.memoryMb);
   const temporal = useViewerStore((state) => state.temporal);
   const relight = useViewerStore((state) => state.relight);
+  const tool = useViewerStore((state) => state.workspaceTool);
   const [showSharpness, setShowSharpness] = useState(false);
 
   const badge = backendBadge(backend?.backend ?? 'none', backend?.webgpu === true);
@@ -52,6 +53,12 @@ export function ViewerHud() {
         Nitidez
       </button>
       {memoryMb !== null && <span>{memoryMb.toFixed(0)} MB</span>}
+      {tool === 'fly' && (
+        <span className="gs-hud-hint">
+          Voar: WASD/setas movem · Q/E sobe/desce · Shift acelera · arraste olha · roda avança ·
+          duplo clique foca
+        </span>
+      )}
       {showSharpness && <SharpnessControls quality={quality} />}
       {temporal.enabled && (
         <label className="gs-scrubber">

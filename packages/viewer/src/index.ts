@@ -173,3 +173,11 @@ export {
   interpolateOffsets,
   type TemporalPose,
 } from './temporal/cameras';
+export { FlyControls, type FlyFocusPoint } from './navigation/FlyControls';
+export {
+  clampPitchAndLevel,
+  FLY_PITCH_LIMIT,
+  flySpeedsForBounds,
+  pivotAhead,
+  type FlySpeeds,
+} from './navigation/flyMath';

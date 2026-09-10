@@ -145,7 +145,7 @@ Decisões estruturais:
 - [x] **Interface `SplatRenderer` própria** (decisão 2026-09-04): contrato + adapters Spark / @mkkellogg — testes de `detectBackend`. **Renderer não executado** nesta máquina (WebGPU/WebGL).
 - [x] Detecção de capability (WebGPU? WebGL2?) no código do backend — testes unitários. Badge "Spark · WebGPU" no HUD quando o adapter existe (verificação visual no browser **ainda** pendente).
 - [ ] Carregamento de `.ksplat` (web) / `.ply` (master) com progress bar — UI existe; **não** verificado com splat real.
-- [ ] Navegação: `OrbitControls` + presets de câmera — código no viewer; **não** verificado rodando.
+- [ ] Navegação: `OrbitControls` + presets de câmera + **voo em primeira pessoa** (`FlyControls` sobre o `SparkControls` do Spark: WASD/setas, Q/E, Shift/Ctrl, look por arraste, roda avança, duplo-clique foca; velocidade escala com a diagonal da cena) — código no viewer; voo **não** verificado em runtime.
 - [x] Seleção por clique: raycast de mesh + picking por centros de gaussiana — testes unitários de picking.
 - [ ] HUD: contagem de gaussianas, FPS, memória, backend ativo — UI presente; **não** medida em runtime.
 - [x] Integração com backend: cliente `viewerApi` + rotas `/viewer` (auth Supabase/bypass) — testes de parser/API. Viewer 3D ao vivo **não** exercitado.

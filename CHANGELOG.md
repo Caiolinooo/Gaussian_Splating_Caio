@@ -7,7 +7,25 @@ e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
-Nada ainda.
+### Adicionado
+
+- **Navegação em primeira pessoa (C2 do plano do editor)**: nova ferramenta **"Voar"** no
+  viewer. WASD/setas movem a câmera pela cena, Q/E (ou PageUp/PageDown) sobem/descem,
+  Shift acelera (×5), Ctrl desacelera (×1/5), CapsLock acelera (×10); o arraste gira a
+  vista, a roda avança/recua e o **duplo-clique foca** o ponto da cena sob o cursor
+  (funciona também na órbita). A velocidade é derivada do tamanho da cena (diagonal do
+  splat: atravessar leva ~7s sem Shift), então andar dentro do ambiente tem a escala
+  da captura. Implementação: `FlyControls` — wrapper fino sobre o `SparkControls`
+  (`FpsMovement` + `PointerControls`) do Spark 2.1 — e `flyMath` (velocidades, limite
+  de pitch, pivô à frente) em `@gs/viewer/navigation`, com testes. Ao sair do voo o
+  pitch é limitado a ±85°, o roll zerado e o pivô da órbita realinhado à frente da
+  câmera, sem salto. A roda do `PointerControls` acumula mesmo desabilitada — o
+  wrapper zera acumulados ao ligar/desligar para não dar salto de dolly.
+- Sincronização do trabalho do L4 (commit `5a3178e`): cleanup de agulhas/floaters no
+  `.ply` mestre (`export/cleanup.py`), câmeras temporal no frame do ply com
+  `up`/`fovY` + botão "Captura" (pose da 1ª câmera COLMAP), LOD do Spark desligado
+  (merge de gaussianas-agulha em elipsoide gigante) e `Cache-Control: no-store` nos
+  artefatos de splat/cena.
 
 ## [0.3.0] - 2026-09-09
 

@@ -1,13 +1,18 @@
 import { OverlayManager, OverlayValidationError, type OverlayDraft } from '@gs/overlays';
 import {
+  clampPitchAndLevel,
   clusterOffsetAt,
   createOpenCvToThreeTRS,
+  createRayFromNdc,
   createSplatRenderer,
   createTRS,
   DEFAULT_SPLAT_QUALITY,
+  flySpeedsForBounds,
+  FlyControls,
   interpolateCamera,
   pickClosest,
   pickMeshes,
+  pivotAhead,
   pointInPolygon,
   pointInRect,
   projectCenter,
@@ -30,6 +35,7 @@ import {
   type SplatQuality,
   type SplatRenderer,
   type TRS,
+  type FlyFocusPoint,
 } from '@gs/viewer';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -94,6 +100,11 @@ export class ViewerController {
   splatRenderer: SplatRenderer | null = null;
   splatHandle: SplatHandle | null = null;
   gizmo: TransformGizmo | null = null;
+  /** Navegação em primeira pessoa (C2): WASD/setas movem, arraste olha. */
+  readonly fly: FlyControls;
+  private flyActive = false;
+  /** Distância câmera→pivô enquanto voa; mantém a órbita coerente ao voltar. */
+  private flyPivotDistance = 6;
 
   private readonly tapeVisuals: TapeVisuals;
   private readonly selectionHelper: THREE.BoxHelper;
@@ -159,6 +170,9 @@ export class ViewerController {
     this.controls.minDistance = 0.05;
     this.controls.maxDistance = 8000;
     this.controls.target.set(0, 1, 0);
+
+    this.fly = new FlyControls({ canvas, camera: this.camera });
+    this.fly.onFocus((point) => this.focusFlyAt(point));
 
     this.ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     this.scene.add(this.ambientLight);
@@ -288,6 +302,7 @@ export class ViewerController {
     this.unsubEditing?.();
     this.unsubUnits?.();
     this.gizmo?.dispose();
+    this.fly.dispose();
     this.tapeVisuals.dispose();
     this.overlayManager.dispose();
     this.splatRenderer?.dispose();
@@ -318,9 +333,94 @@ export class ViewerController {
     if (tool !== 'edit') {
       this.selectNode(null);
     }
+    this.setFlyActive(tool === 'fly');
     this.controls.enableRotate = tool !== 'tape';
     this.controls.enablePan = true;
     this.controls.enableZoom = true;
+  }
+
+  /**
+   * Alterna a navegação em primeira pessoa. Ao entrar, a órbita dorme e o
+   * pivô fica à frente da câmera; ao sair, o pitch é limitado e o pivô
+   * realinhado para o OrbitControls retomar sem salto.
+   */
+  private setFlyActive(active: boolean): void {
+    if (active === this.flyActive) {
+      return;
+    }
+    this.flyActive = active;
+    if (active) {
+      this.flyPivotDistance = Math.max(
+        this.camera.position.distanceTo(this.controls.target),
+        0.5,
+      );
+      this.controls.enabled = false;
+      this.fly.setEnabled(true);
+      return;
+    }
+    this.fly.setEnabled(false);
+    clampPitchAndLevel(this.camera.quaternion);
+    this.camera.up.set(0, 1, 0);
+    pivotAhead(this.camera.position, this.camera.quaternion, this.flyPivotDistance, this.controls.target);
+    this.controls.enabled = true;
+    this.controls.update();
+  }
+
+  /** Velocidades do voo + pivô, após qualquer reposicionamento da câmera. */
+  private syncFlyAfterPlacement(): void {
+    const box = this.splatRenderer?.getWorldBounds(this.splatHandle ?? undefined) ?? null;
+    const diagonal = box
+      ? new THREE.Vector3(
+          box.max.x - box.min.x,
+          box.max.y - box.min.y,
+          box.max.z - box.min.z,
+        ).length()
+      : Number.NaN;
+    const speeds = flySpeedsForBounds(diagonal);
+    this.fly.moveSpeed = speeds.move;
+    this.fly.slideSpeed = speeds.slide;
+    this.fly.scrollSpeed = speeds.scroll;
+    this.flyPivotDistance = Math.max(
+      this.camera.position.distanceTo(this.controls.target),
+      0.5,
+    );
+  }
+
+  /**
+   * Duplo-clique (modo voar ou órbita): aproxima a câmera do ponto da cena
+   * sob o cursor e realinha o pivô — o "focar" dos viewers de splat.
+   */
+  private focusFlyAt(point: FlyFocusPoint): void {
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return;
+    }
+    const ndc = {
+      x: (point.position.x / rect.width) * 2 - 1,
+      y: -((point.position.y / rect.height) * 2 - 1),
+    };
+    const ray = createRayFromNdc(ndc.x, ndc.y, this.camera);
+    const meshHits = pickMeshes(ray, [asObject3D(this.sceneManager.root) ?? this.scene], true).filter(
+      (hit) => !isHelper(hit.object) && !isProxyMesh(hit.object),
+    );
+    const splatHit = this.splatRenderer?.pick(ray) ?? null;
+    const unified = pickClosest(meshHits, splatHit);
+    const world =
+      unified?.kind === 'mesh'
+        ? new THREE.Vector3(unified.mesh.point.x, unified.mesh.point.y, unified.mesh.point.z)
+        : unified?.kind === 'splat'
+          ? new THREE.Vector3(unified.splat.point.x, unified.splat.point.y, unified.splat.point.z)
+          : null;
+    if (!world) {
+      return;
+    }
+    const distance = this.camera.position.distanceTo(world);
+    const stop = Math.max(Math.min(distance * 0.5, this.flyPivotDistance), 0.25);
+    const back = new THREE.Vector3().subVectors(this.camera.position, world).normalize();
+    this.camera.position.copy(world).addScaledVector(back, stop);
+    this.flyPivotDistance = stop;
+    pivotAhead(this.camera.position, this.camera.quaternion, stop, this.controls.target);
+    this.controls.update();
   }
 
   fitToSplat(): boolean {
@@ -331,7 +431,11 @@ export class ViewerController {
     if (!box) {
       return false;
     }
-    return fitOrbitToBox(this.camera, this.controls, box);
+    const ok = fitOrbitToBox(this.camera, this.controls, box);
+    if (ok) {
+      this.syncFlyAfterPlacement();
+    }
+    return ok;
   }
 
   /**
@@ -339,7 +443,11 @@ export class ViewerController {
    * É o ponto de vista em que o treino converge — iso/AABB mostra agulhas.
    */
   frameFromCapture(): boolean {
-    return this.applyTemporalPose(this.sceneManager.getState().temporal, { followCamera: true });
+    const ok = this.applyTemporalPose(this.sceneManager.getState().temporal, { followCamera: true });
+    if (ok) {
+      this.syncFlyAfterPlacement();
+    }
+    return ok;
   }
 
   setQuality(patch: Partial<SplatQuality>): void {
@@ -1484,6 +1592,10 @@ export class ViewerController {
       this.redo();
       return;
     }
+    // Voando, W/E/R/T são navegação (WASD), não atalhos de gizmo/trena.
+    if (this.flyActive) {
+      return;
+    }
     if (event.key.toLowerCase() === 't' && !ctrl) {
       event.preventDefault();
       useTapeStore.getState().toggleActive();
@@ -1579,7 +1691,17 @@ export class ViewerController {
           memoryMb: memory,
         });
       }
-      this.controls.update();
+      if (this.flyActive) {
+        this.fly.update(Math.min(dt, 100) / 1000);
+        pivotAhead(
+          this.camera.position,
+          this.camera.quaternion,
+          this.flyPivotDistance,
+          this.controls.target,
+        );
+      } else {
+        this.controls.update();
+      }
       if (this.selectionHelper.visible) {
         this.selectionHelper.update();
       }

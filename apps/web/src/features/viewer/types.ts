@@ -1,6 +1,6 @@
 import type { BackendDetection, RendererBackendKind, SplatQuality } from '@gs/viewer';
 
-export type WorkspaceTool = 'orbit' | 'tape' | 'edit' | 'overlay';
+export type WorkspaceTool = 'orbit' | 'fly' | 'tape' | 'edit' | 'overlay';
 
 export type CameraPreset = 'front' | 'side' | 'top' | 'iso';
 
@@ -40,6 +40,7 @@ export function isCameraPreset(value: string): value is CameraPreset {
 export function isWorkspaceTool(value: string): value is WorkspaceTool {
   switch (value) {
     case 'orbit':
+    case 'fly':
     case 'tape':
     case 'edit':
     case 'overlay':
