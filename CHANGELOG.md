@@ -69,6 +69,8 @@ limpeza de floaters (C1). Sincronização do trabalho desenvolvido no servidor G
   forma de flag booleana — valor solto virava "Unrecognized options". Agora emite
   `--no-normalize-world-space` (`job_runtime.py` nos dois pontos e default do
   `TrainConfig`); `trainer_normalizes_world` reconhece as formas `--no-` e a de valor.
+  Registros de jobs antigos guardam o argv legado e o retry o repete — o
+  `TrainConfig` agora canonicaliza o `extra_args` persistido na carga.
 - **`resolve_master_ply` escolhia o checkpoint errado**: ordenava os `.ply` por
   texto, então `point_cloud_6999.ply` vinha depois de `point_cloud_29999.ply`
   ("6" > "2") e o meshproxy usava um checkpoint antigo. Agora ordena pelo número
