@@ -97,8 +97,7 @@ class PipelineMachineAdapter:
                             "0.05",
                             "--opacity_reg",
                             "0.01",
-                            "--normalize_world_space",
-                            "False",
+                            "--no-normalize-world-space",
                         ),
                     )
                 ),
@@ -213,8 +212,7 @@ def train_from_settings(settings: Settings) -> Any:
             "0.05",
             "--opacity_reg",
             "0.01",
-            "--normalize_world_space",
-            "False",
+            "--no-normalize-world-space",
         ),
     )
 

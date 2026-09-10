@@ -46,8 +46,7 @@ class TrainConfig:
             "0.05",
             "--opacity_reg",
             "0.01",
-            "--normalize_world_space",
-            "False",
+            "--no-normalize-world-space",
         )
     )
     timeout_s: float | None = None

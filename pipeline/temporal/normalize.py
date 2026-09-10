@@ -30,12 +30,14 @@ def _quat_to_rot(
 
 
 def trainer_normalizes_world(extra_args: tuple[str, ...] | list[str]) -> bool:
-    """gsplat default is True. Only an explicit False/0/no disables it."""
+    """gsplat default is True. ``--no-`` flag or an explicit False/0/no disables it."""
     args = list(extra_args)
     for index, flag in enumerate(args):
+        if flag in {"--no-normalize-world-space", "--no-normalize_world_space"}:
+            return False
         if flag not in {"--normalize_world_space", "--normalize-world-space"}:
             continue
-        if index + 1 >= len(args):
+        if index + 1 >= len(args) or str(args[index + 1]).startswith("-"):
             return True
         return str(args[index + 1]).lower() not in {"false", "0", "no"}
     return True
