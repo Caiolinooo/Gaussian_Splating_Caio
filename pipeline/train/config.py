@@ -43,9 +43,11 @@ class TrainConfig:
             "--sh_degree",
             "3",
             "--scale_reg",
-            "0.01",
+            "0.05",
             "--opacity_reg",
             "0.01",
+            "--normalize_world_space",
+            "False",
         )
     )
     timeout_s: float | None = None

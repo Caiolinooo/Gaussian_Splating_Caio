@@ -87,7 +87,20 @@ class PipelineMachineAdapter:
                 eval_steps=tuple(getattr(train, "eval_steps", (30_000,))),
                 ply_steps=tuple(getattr(train, "ply_steps", (15_000, 30_000))),
                 extra_args=tuple(
-                    getattr(train, "extra_args", ("--sh_degree", "3", "--scale_reg", "0.01", "--opacity_reg", "0.01"))
+                    getattr(
+                        train,
+                        "extra_args",
+                        (
+                            "--sh_degree",
+                            "3",
+                            "--scale_reg",
+                            "0.05",
+                            "--opacity_reg",
+                            "0.01",
+                            "--normalize_world_space",
+                            "False",
+                        ),
+                    )
                 ),
             )
         colmap = getattr(spec, "colmap", None)
@@ -193,7 +206,16 @@ def train_from_settings(settings: Settings) -> Any:
         save_steps=(mid, steps) if mid < steps else (steps,),
         eval_steps=(steps,),
         ply_steps=(mid, steps) if mid < steps else (steps,),
-        extra_args=("--sh_degree", str(degree), "--scale_reg", "0.01", "--opacity_reg", "0.01"),
+        extra_args=(
+            "--sh_degree",
+            str(degree),
+            "--scale_reg",
+            "0.05",
+            "--opacity_reg",
+            "0.01",
+            "--normalize_world_space",
+            "False",
+        ),
     )
 
 

@@ -27,6 +27,7 @@ from sceneio.ingest import ingest_scene
 from sfm.commands import build_model_converter_bin_command
 from sfm.config import ColmapConfig, ColmapPaths
 from temporal.clusters import build_temporal_scene, write_temporal_document
+from temporal.normalize import trainer_normalizes_world
 from temporal.flow_rigs import write_4dgs_npz
 
 try:
@@ -260,6 +261,7 @@ def handle_training(record: JobRecord, progress: Callable[[float, str], None], r
         fps=prior_temporal.get("fps") if isinstance(prior_temporal.get("fps"), (int, float)) else None,
         source_kind=str(prior_temporal.get("sourceKind") or record.source.kind.value),
         frames_dir=paths.kept_frames_dir if paths.kept_frames_dir.is_dir() else paths.frames_dir,
+        normalize_world_space=trainer_normalizes_world(record.train.extra_args),
     )
     record.extra["temporal"] = temporal_scene.to_document()
     relight_env = build_relight_env(sh_degree=3)

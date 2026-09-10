@@ -249,6 +249,9 @@ export class ViewerController {
         this.installEmptyBackground(options.jobId);
         await this.applyExportedScene(options.jobId);
         this.syncCalibrationFromManager();
+        if (!this.frameFromCapture()) {
+          this.fitToSplat();
+        }
         this.decideGate(options.sceneId);
       } else {
         store.setLoad('ready', 1, '');
@@ -329,6 +332,14 @@ export class ViewerController {
       return false;
     }
     return fitOrbitToBox(this.camera, this.controls, box);
+  }
+
+  /**
+   * Coloca a órbita na 1ª câmera COLMAP (mesmo espaço Y-up do splat).
+   * É o ponto de vista em que o treino converge — iso/AABB mostra agulhas.
+   */
+  frameFromCapture(): boolean {
+    return this.applyTemporalPose(this.sceneManager.getState().temporal, { followCamera: true });
   }
 
   setQuality(patch: Partial<SplatQuality>): void {
@@ -946,6 +957,9 @@ export class ViewerController {
     }
     this.syncCalibrationFromManager();
     this.syncTemporalFromManager();
+    if (!this.frameFromCapture()) {
+      this.fitToSplat();
+    }
     this.decideGate(sceneId);
     this.tagHosts();
   }
@@ -978,7 +992,7 @@ export class ViewerController {
   private applyTemporalPose(
     temporal: ReturnType<SceneManager['getState']>['temporal'],
     options: { followCamera?: boolean } = {},
-  ): void {
+  ): boolean {
     this.splatRenderer?.setTime(temporal.currentTime);
     if (this.splatHandle && this.splatRenderer) {
       const offset = clusterOffsetAt(temporal, temporal.currentTime);
@@ -993,16 +1007,39 @@ export class ViewerController {
     }
     const follow = options.followCamera ?? true;
     if (!follow || !temporal.enabled || !temporal.cameras?.length) {
-      return;
+      return false;
     }
     const pose = interpolateCamera(temporal.cameras, temporal.currentTime);
     if (!pose) {
-      return;
+      return false;
     }
-    this.camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
-    this.controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
+    const root = asObject3D(this.sceneManager.root);
+    const scale = root?.scale.x && Number.isFinite(root.scale.x) ? root.scale.x : 1;
+    const px = pose.position[0] * scale;
+    const py = pose.position[1] * scale;
+    const pz = pose.position[2] * scale;
+    const tx = pose.target[0] * scale;
+    const ty = pose.target[1] * scale;
+    const tz = pose.target[2] * scale;
+    this.camera.position.set(px, py, pz);
+    this.controls.target.set(tx, ty, tz);
+    if (pose.up) {
+      this.camera.up.set(pose.up[0], pose.up[1], pose.up[2]);
+    } else {
+      this.camera.up.set(0, 1, 0);
+    }
+    const dist = Math.hypot(px - tx, py - ty, pz - tz);
+    this.camera.near = Math.max(dist / 200, 0.01);
+    this.camera.far = Math.max(dist * 80, 400);
+    if (typeof pose.fovY === 'number' && pose.fovY > 5 && pose.fovY < 150) {
+      this.camera.fov = pose.fovY;
+    }
+    this.camera.updateProjectionMatrix();
     this.camera.lookAt(this.controls.target);
+    this.controls.minDistance = Math.max(dist * 0.05, 0.02);
+    this.controls.maxDistance = Math.max(dist * 40, 8);
     this.controls.update();
+    return true;
   }
 
   private applyRelight(relight: RelightJson): void {
@@ -1101,7 +1138,6 @@ export class ViewerController {
     this.setQuality({ shDegree: toShDegree(Math.min(3, maxSh)) });
     this.applyRelight(this.sceneManager.getState().relight);
     this.applyTemporalPose(this.sceneManager.getState().temporal, { followCamera: false });
-    this.fitToSplat();
     useViewerStore
       .getState()
       .setHud({ gaussianCount: this.splatRenderer.getGaussianCount(handle) });

@@ -150,10 +150,9 @@ export function createSparkSplatMesh(
     maxSh: options.maxSh,
     raycastable: true,
     editable: true,
-    lod: true,
-    nonLod: true,
-    enableLod: true,
-    lodScale: 1.25,
+    // Spark LOD merges needle Gaussians into one huge ellipsoid.
+    lod: false,
+    enableLod: false,
     onProgress: options.onProgress,
   });
 }

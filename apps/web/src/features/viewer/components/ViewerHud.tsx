@@ -37,6 +37,9 @@ export function ViewerHud() {
       >
         SH {quality.shDegree}
       </button>
+      <button type="button" onClick={() => controller?.frameFromCapture()} title="Ir para a 1ª câmera do COLMAP">
+        Captura
+      </button>
       <button type="button" onClick={() => controller?.fitToSplat()}>
         Enquadrar
       </button>

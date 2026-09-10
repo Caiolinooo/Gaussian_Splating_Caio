@@ -10,6 +10,7 @@ from typing import Any
 
 from geom.planes import Plane, fit_planes, parse_points3d_txt
 from temporal.flow_rigs import estimate_cluster_keys
+from temporal.normalize import cameras_from_extrinsics
 
 
 @dataclass(frozen=True)
@@ -88,11 +89,11 @@ def interpolate_camera(cameras: list[dict[str, Any]], t: float) -> dict[str, Any
     return cameras[-1]
 
 
-def parse_images_txt(path: Path) -> list[dict[str, Any]]:
-    """COLMAP ``images.txt`` → camera centers in world (Y-up after 180° X)."""
+def parse_image_extrinsics(path: Path) -> list[dict[str, Any]]:
+    """COLMAP ``images.txt`` rows (name + world-to-camera quat/t), sorted by name."""
     if not path.is_file():
         return []
-    cameras: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     index = 0
     while index < len(lines):
@@ -103,22 +104,45 @@ def parse_images_txt(path: Path) -> list[dict[str, Any]]:
         parts = line.split()
         if len(parts) < 10:
             continue
-        qw, qx, qy, qz = (float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4]))
-        tx, ty, tz = (float(parts[5]), float(parts[6]), float(parts[7]))
-        name = parts[9]
-        center = _camera_center(qw, qx, qy, qz, tx, ty, tz)
-        look = _camera_look(qw, qx, qy, qz, center)
+        rows.append(
+            {
+                "name": parts[9],
+                "qw": float(parts[1]),
+                "qx": float(parts[2]),
+                "qy": float(parts[3]),
+                "qz": float(parts[4]),
+                "tx": float(parts[5]),
+                "ty": float(parts[6]),
+                "tz": float(parts[7]),
+            }
+        )
+        if index < len(lines) and not lines[index].strip().startswith("#"):
+            index += 1
+    rows.sort(key=lambda item: str(item["name"]))
+    return rows
+
+
+def parse_images_txt(path: Path, *, normalize_world_space: bool = False, points3d_txt: Path | None = None) -> list[dict[str, Any]]:
+    """COLMAP ``images.txt`` → camera centers in world (Y-up after 180° X)."""
+    extrinsics = parse_image_extrinsics(path)
+    if not extrinsics:
+        return []
+    if normalize_world_space:
+        points_xyz: list[tuple[float, float, float]] = []
+        if points3d_txt is not None and points3d_txt.is_file():
+            points_xyz = [(row[1], row[2], row[3]) for row in parse_points3d_txt(points3d_txt)]
+        return cameras_from_extrinsics(extrinsics, points_xyz)
+    cameras: list[dict[str, Any]] = []
+    for row in extrinsics:
+        center = _camera_center(row["qw"], row["qx"], row["qy"], row["qz"], row["tx"], row["ty"], row["tz"])
+        look = _camera_look(row["qw"], row["qx"], row["qy"], row["qz"], center)
         cameras.append(
             {
-                "name": name,
+                "name": row["name"],
                 "position": [center[0], center[1], center[2]],
                 "target": [look[0], look[1], look[2]],
             }
         )
-        # next line is POINTS2D
-        if index < len(lines) and not lines[index].strip().startswith("#"):
-            index += 1
-    cameras.sort(key=lambda item: str(item["name"]))
     count = len(cameras)
     for cam_index, camera in enumerate(cameras):
         camera["t"] = 0.0 if count <= 1 else cam_index / (count - 1)
@@ -134,8 +158,17 @@ def build_temporal_scene(
     fps: float | None,
     source_kind: str,
     frames_dir: Path | None = None,
+    normalize_world_space: bool = False,
 ) -> TemporalScene:
-    cameras = parse_images_txt(images_txt) if images_txt is not None else []
+    cameras = (
+        parse_images_txt(
+            images_txt,
+            normalize_world_space=normalize_world_space,
+            points3d_txt=points3d_txt,
+        )
+        if images_txt is not None
+        else []
+    )
     times = [float(camera["t"]) for camera in cameras] or [0.0, 1.0]
     points: list[tuple[float, float, float]] = []
     if points3d_txt is not None:

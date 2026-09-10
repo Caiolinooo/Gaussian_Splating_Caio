@@ -72,6 +72,10 @@ export interface TemporalCameraJson {
   position: [number, number, number];
   target: [number, number, number];
   name?: string;
+  /** Eixo up já em Y-up (Three). Sem ele o lookAt usa (0,1,0) e rola a captura. */
+  up?: [number, number, number];
+  /** FOV vertical em graus (COLMAP fy + altura). */
+  fovY?: number;
 }
 
 export const DEFAULT_TEMPORAL: TemporalJson = Object.freeze({
@@ -84,7 +88,7 @@ export const DEFAULT_TEMPORAL: TemporalJson = Object.freeze({
 });
 
 export const DEFAULT_RELIGHT: RelightJson = Object.freeze({
-  enabled: true,
+  enabled: false,
   mode: 'sh-env',
   hasSphericalHarmonics: true,
   shDegree: 3,

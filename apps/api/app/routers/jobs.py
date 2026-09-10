@@ -194,7 +194,15 @@ def download_artifact(
         settings=runtime.settings,
         user_id=user.user_id,
     )
-    return FileResponse(path, media_type=media_type_for(kind), filename=path.name)
+    headers = {}
+    if kind in {ArtifactKind.PLY, ArtifactKind.KSPLAT, ArtifactKind.SCENE}:
+        headers["Cache-Control"] = "no-store"
+    return FileResponse(
+        path,
+        media_type=media_type_for(kind),
+        filename=path.name,
+        headers=headers,
+    )
 
 
 @router.websocket("/{job_id}/events")

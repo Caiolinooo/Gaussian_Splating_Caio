@@ -5,6 +5,19 @@ export interface TemporalPose {
   position: [number, number, number];
   target: [number, number, number];
   name?: string;
+  up?: [number, number, number];
+  fovY?: number;
+}
+
+function clonePose(camera: TemporalCameraJson): TemporalPose {
+  return {
+    t: camera.t,
+    position: [...camera.position],
+    target: [...camera.target],
+    name: camera.name,
+    up: camera.up ? [...camera.up] : undefined,
+    fovY: camera.fovY,
+  };
 }
 
 function lerp3(a: readonly number[], b: readonly number[], alpha: number): [number, number, number] {
@@ -28,10 +41,10 @@ export function interpolateCamera(
     return null;
   }
   if (t <= first.t) {
-    return { ...first, position: [...first.position], target: [...first.target] };
+    return clonePose(first);
   }
   if (t >= last.t) {
-    return { ...last, position: [...last.position], target: [...last.target] };
+    return clonePose(last);
   }
   for (let index = 0; index < cameras.length - 1; index += 1) {
     const a = cameras[index];
@@ -47,10 +60,12 @@ export function interpolateCamera(
         position: lerp3(a.position, b.position, alpha),
         target: lerp3(a.target, b.target, alpha),
         name: a.name,
+        up: a.up && b.up ? lerp3(a.up, b.up, alpha) : a.up ? [...a.up] : b.up ? [...b.up] : undefined,
+        fovY: a.fovY ?? b.fovY,
       };
     }
   }
-  return { ...last, position: [...last.position], target: [...last.target] };
+  return clonePose(last);
 }
 
 export function interpolateOffsets(

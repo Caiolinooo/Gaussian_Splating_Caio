@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from export.cleanup import clean_gaussian_ply
 from export.commands import build_ksplat_command, build_thumbnail_command
 from export.config import ExportConfig
 from export.errors import missing_ply, thumbnail_failed, transform_failed
@@ -91,6 +92,19 @@ def run_export(
         progress(0.1, "Copiando .ply mestre (SH)…")
     _copy_master(source_ply, master)
     LOGGER.info("event=export_ply_copied src=%s dest=%s", source_ply, master)
+    raw_backup = export_dir / "master.raw.ply"
+    if config.cleanup_needles and not raw_backup.is_file():
+        shutil.copy2(master, raw_backup)
+    if progress is not None:
+        progress(0.2, "Limpando agulhas e floaters no .ply…")
+    cleanup = clean_gaussian_ply(master, config)
+    LOGGER.info(
+        "event=export_ply_cleanup skipped=%s reason=%s kept=%s/%s",
+        cleanup.skipped,
+        cleanup.reason,
+        cleanup.kept,
+        cleanup.input_count,
+    )
 
     ksplat_argv = build_ksplat_command(config, master, web)
     if progress is not None:
